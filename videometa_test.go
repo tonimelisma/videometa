@@ -268,3 +268,45 @@ func TestShouldHandleTag(t *testing.T) {
 	c.Assert(len(tags), qt.Equals, 1)
 	c.Assert(tags["TimeScale"].Value, qt.Equals, uint32(1000))
 }
+
+// Validates: ARCH-IO-05
+func TestDecodeWithIOReaderFallback(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer f.Close()
+
+	// Wrap in a plain io.Reader (no seeking).
+	result, err := Decode(Options{
+		R:         readerOnly{f},
+		Sources:   CONFIG | QUICKTIME,
+		HandleTag: func(ti TagInfo) error { return nil },
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.VideoConfig.Width, qt.Equals, 320)
+}
+
+// Validates: REQ-API-17
+func TestDecodeNoMetadataFile(t *testing.T) {
+	c := qt.New(t)
+
+	// An empty ftyp-only "file" — valid MP4 structure but no metadata.
+	data := make([]byte, 0, 20)
+	data = append(data, 0, 0, 0, 20, 'f', 't', 'y', 'p')
+	data = append(data, 'i', 's', 'o', 'm')
+	data = append(data, 0, 0, 0, 0)
+	data = append(data, 'i', 's', 'o', 'm')
+
+	count := 0
+	_, err := Decode(Options{
+		R:       readerSeekerFromBytes(data),
+		Sources: QUICKTIME | CONFIG,
+		HandleTag: func(ti TagInfo) error {
+			count++
+			return nil
+		},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(count, qt.Equals, 0) // No metadata tags emitted.
+}
