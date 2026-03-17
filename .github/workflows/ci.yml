@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Install exiftool
+        run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
+
+      - name: Build
+        run: CGO_ENABLED=0 go build ./...
+
+      - name: Test
+        run: go test -race -coverprofile=cover.out ./...
+
+      - name: Coverage
+        run: go tool cover -func=cover.out | grep total
+
+      - name: Validate golden files
+        run: |
+          cd gen && go run main.go
+          cd ..
+          if ! git diff --quiet testdata/*.exiftool.json; then
+            echo "Golden files are out of date. Run 'cd gen && go run main.go' and commit."
+            git diff testdata/*.exiftool.json
+            exit 1
+          fi
