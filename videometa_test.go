@@ -135,6 +135,27 @@ func TestDecodeAll(t *testing.T) {
 	c.Assert(all["TimeScale"].Value, qt.Equals, uint32(1000))
 }
 
+// Validates: REQ-QT-01
+func TestDecodeIlstEncoder(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer f.Close()
+
+	tags, err := DecodeAll(Options{
+		R:       f,
+		Sources: QUICKTIME,
+	})
+	c.Assert(err, qt.IsNil)
+
+	qtTags := tags.QuickTime()
+	// minimal.mp4 has ©too = "Lavf62.3.100" which maps to "Encoder".
+	encoder, ok := qtTags["Encoder"]
+	c.Assert(ok, qt.IsTrue, qt.Commentf("expected Encoder tag from ilst"))
+	c.Assert(encoder.Value, qt.Equals, "Lavf62.3.100")
+}
+
 // Validates: REQ-BOX-08
 func TestDecodeFragmentedMP4Rejected(t *testing.T) {
 	c := qt.New(t)
