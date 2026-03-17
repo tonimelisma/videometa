@@ -168,11 +168,27 @@ func Decode(opts Options) (result DecodeResult, err error) {
 		return result, fmt.Errorf("videometa: unsupported format %d", format)
 	}
 
-	if decErr := dec.decode(); decErr != nil {
-		if errors.Is(decErr, ErrStopWalking) {
-			return result, nil
+	// Run decode with optional timeout.
+	if opts.Timeout > 0 {
+		done := make(chan error, 1)
+		go func() {
+			done <- dec.decode()
+		}()
+		select {
+		case decErr := <-done:
+			if decErr != nil && !errors.Is(decErr, ErrStopWalking) {
+				return result, decErr
+			}
+		case <-time.After(opts.Timeout):
+			return result, fmt.Errorf("videometa: decode timed out after %v", opts.Timeout)
 		}
-		return result, decErr
+	} else {
+		if decErr := dec.decode(); decErr != nil {
+			if errors.Is(decErr, ErrStopWalking) {
+				return result, nil
+			}
+			return result, decErr
+		}
 	}
 
 	return result, nil
@@ -239,10 +255,30 @@ func (t Tags) QuickTime() map[string]TagInfo { return t.quicktime }
 func (t Tags) Config() map[string]TagInfo { return t.config }
 
 // GetDateTime returns the best available creation time with original timezone.
-// Priority: EXIF DateTimeOriginal > XMP DateTimeOriginal > QuickTime CreationDate > IPTC DateCreated.
+// Priority: EXIF DateTimeOriginal > XMP CreateDate > QuickTime CreationDate > QuickTime CreateDate.
 func (t Tags) GetDateTime() (time.Time, error) {
-	// Will be implemented in Milestone 7.
-	return time.Time{}, fmt.Errorf("videometa: GetDateTime not yet implemented")
+	// Try sources in priority order.
+	candidates := []struct {
+		tags map[string]TagInfo
+		keys []string
+	}{
+		{t.exif, []string{"DateTimeOriginal", "CreateDate", "ModifyDate"}},
+		{t.xmp, []string{"DateTimeOriginal", "CreateDate", "ModifyDate"}},
+		{t.quicktime, []string{"CreationDate", "CreateDate", "ModifyDate"}},
+		{t.iptc, []string{"DateCreated"}},
+	}
+
+	for _, c := range candidates {
+		for _, key := range c.keys {
+			if tag, ok := c.tags[key]; ok {
+				if dt, err := parseAnyDateTime(tag.Value); err == nil {
+					return dt, nil
+				}
+			}
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("videometa: no date/time found")
 }
 
 // GetDateTimeUTC returns GetDateTime() normalized to UTC.
@@ -257,8 +293,38 @@ func (t Tags) GetDateTimeUTC() (time.Time, error) {
 // GetLatLong returns GPS coordinates in decimal degrees.
 // Priority: EXIF GPS > XMP GPS > QuickTime GPS.
 func (t Tags) GetLatLong() (lat, lon float64, err error) {
-	// Will be implemented in Milestone 7.
-	return 0, 0, fmt.Errorf("videometa: GetLatLong not yet implemented")
+	// Try EXIF GPS.
+	if latTag, ok := t.exif["GPSLatitude"]; ok {
+		if lonTag, ok := t.exif["GPSLongitude"]; ok {
+			if latVal, ok := toFloat64(latTag.Value); ok {
+				if lonVal, ok := toFloat64(lonTag.Value); ok {
+					return latVal, lonVal, nil
+				}
+			}
+		}
+	}
+
+	// Try XMP GPS.
+	if latTag, ok := t.xmp["GPSLatitude"]; ok {
+		if lonTag, ok := t.xmp["GPSLongitude"]; ok {
+			if latVal, ok := toFloat64(latTag.Value); ok {
+				if lonVal, ok := toFloat64(lonTag.Value); ok {
+					return latVal, lonVal, nil
+				}
+			}
+		}
+	}
+
+	// Try QuickTime GPS (from ISO6709 or ©xyz).
+	if gpsTag, ok := t.quicktime["GPSCoordinates"]; ok {
+		if s, ok := gpsTag.Value.(string); ok {
+			if lat, lon, err := parseISO6709(s); err == nil {
+				return lat, lon, nil
+			}
+		}
+	}
+
+	return 0, 0, fmt.Errorf("videometa: no GPS coordinates found")
 }
 
 // DecodeAll decodes all metadata into a Tags struct.
