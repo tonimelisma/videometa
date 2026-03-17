@@ -4,9 +4,9 @@ Go package for reading metadata from video files. Companion to [bep/imagemeta](h
 
 ## Status
 
-**Design phase.** bep declined to export imagemeta internals (issue #64). videometa is fully self-contained.
+**Implementation phase.** Core decoders complete (ISOBMFF, EXIF, XMP, IPTC, QuickTime). MakerNotes and extended test coverage pending.
 
-See `INIT.md` for full project context and history. See `docs/` for requirements, architecture, and task plan.
+See `INIT.md` for project history. See `docs/` for requirements, architecture, and task plan. See `README.md` for usage.
 
 ## Routing Table
 
