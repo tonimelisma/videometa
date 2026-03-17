@@ -472,8 +472,9 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
 		case "hdlr":
 			d.decodeMetaHdlr(startPos, boxSize)
 		case "ilst":
-			// QuickTime metadata — will be fully implemented in Milestone 3.
-			// For now, skip.
+			if d.opts.Sources.Has(QUICKTIME) {
+				d.decodeIlst(startPos, boxSize)
+			}
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
