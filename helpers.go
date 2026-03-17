@@ -8,6 +8,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // InvalidFormatError indicates malformed input data.
@@ -294,6 +295,52 @@ func trimNulls(b []byte) []byte {
 		b = b[:len(b)-1]
 	}
 	return b
+}
+
+// parseAnyDateTime attempts to parse a value as a time.Time using multiple
+// strategies: direct time.Time, EXIF-style strings, ISO 8601, QuickTime dates.
+func parseAnyDateTime(v any) (time.Time, error) {
+	switch t := v.(type) {
+	case time.Time:
+		if t.IsZero() {
+			return time.Time{}, fmt.Errorf("zero time")
+		}
+		return t, nil
+	case string:
+		return parseTimeString(t)
+	default:
+		return time.Time{}, fmt.Errorf("unsupported type %T for date/time", v)
+	}
+}
+
+// parseTimeString tries multiple date/time formats used by EXIF, XMP, and QuickTime.
+func parseTimeString(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	if s == "" || s == "0000:00:00 00:00:00" {
+		return time.Time{}, fmt.Errorf("empty or zero date")
+	}
+
+	formats := []string{
+		"2006:01:02 15:04:05",           // EXIF
+		"2006:01:02 15:04:05-07:00",     // EXIF with timezone
+		"2006:01:02 15:04:05Z07:00",     // EXIF with Z timezone
+		"2006-01-02T15:04:05-07:00",     // ISO 8601
+		"2006-01-02T15:04:05Z07:00",     // ISO 8601 with Z
+		"2006-01-02T15:04:05-0700",      // QuickTime
+		"2006-01-02T15:04:05Z",          // ISO 8601 UTC
+		"2006-01-02T15:04:05",           // ISO 8601 no TZ
+		"2006-01-02 15:04:05",           // Simple
+		"2006:01:02",                     // Date only
+		"2006-01-02",                     // Date only ISO
+		time.RFC3339,
+		time.RFC3339Nano,
+	}
+	for _, f := range formats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unrecognized date format: %q", s)
 }
 
 // convertAPEXToFNumber converts an APEX aperture value to an f-number.

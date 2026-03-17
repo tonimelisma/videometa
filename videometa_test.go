@@ -3,6 +3,7 @@ package videometa
 import (
 	"os"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -26,13 +27,11 @@ func TestDecodeMinimalMP4(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
-	// CONFIG: VideoConfig from tkhd and mvhd.
 	c.Assert(result.VideoConfig.Width, qt.Equals, 320)
 	c.Assert(result.VideoConfig.Height, qt.Equals, 240)
 	c.Assert(result.VideoConfig.Rotation, qt.Equals, 0)
 	c.Assert(result.VideoConfig.Codec, qt.Equals, "avc1")
 
-	// QuickTime tags from mvhd.
 	c.Assert(tags["TimeScale"].Value, qt.Equals, uint32(1000))
 	c.Assert(tags["ImageWidth"].Value, qt.Equals, 320)
 	c.Assert(tags["ImageHeight"].Value, qt.Equals, 240)
@@ -74,11 +73,6 @@ func TestDecodeTruncatedMP4(t *testing.T) {
 			return nil
 		},
 	})
-	// Truncated files should return an error (InvalidFormatError or EOF-related).
-	// The ftyp box should parse OK (it's only 32 bytes), but moov will be truncated.
-	// Depending on where truncation hits, we may get an error or just an empty result.
-	// For 500 bytes, the ftyp (32 bytes) and moov header will be read but moov
-	// content will be truncated.
 	if err != nil {
 		c.Assert(IsInvalidFormat(err), qt.IsTrue, qt.Commentf("error: %v", err))
 	}
@@ -87,9 +81,8 @@ func TestDecodeTruncatedMP4(t *testing.T) {
 // Validates: REQ-API-17
 func TestDecodeEmptyOptions(t *testing.T) {
 	c := qt.New(t)
-
 	_, err := Decode(Options{})
-	c.Assert(err, qt.IsNotNil, qt.Commentf("should fail without R"))
+	c.Assert(err, qt.IsNotNil)
 }
 
 // Validates: REQ-API-15
@@ -112,7 +105,7 @@ func TestDecodeStopWalking(t *testing.T) {
 			return nil
 		},
 	})
-	c.Assert(err, qt.IsNil) // ErrStopWalking is not returned to caller.
+	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 3)
 }
 
@@ -124,10 +117,7 @@ func TestDecodeAll(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer f.Close()
 
-	tags, err := DecodeAll(Options{
-		R:       f,
-		Sources: QUICKTIME,
-	})
+	tags, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
 	c.Assert(err, qt.IsNil)
 
 	all := tags.All()
@@ -143,16 +133,12 @@ func TestDecodeIlstEncoder(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer f.Close()
 
-	tags, err := DecodeAll(Options{
-		R:       f,
-		Sources: QUICKTIME,
-	})
+	tags, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
 	c.Assert(err, qt.IsNil)
 
 	qtTags := tags.QuickTime()
-	// minimal.mp4 has ©too = "Lavf62.3.100" which maps to "Encoder".
 	encoder, ok := qtTags["Encoder"]
-	c.Assert(ok, qt.IsTrue, qt.Commentf("expected Encoder tag from ilst"))
+	c.Assert(ok, qt.IsTrue)
 	c.Assert(encoder.Value, qt.Equals, "Lavf62.3.100")
 }
 
@@ -160,24 +146,17 @@ func TestDecodeIlstEncoder(t *testing.T) {
 func TestDecodeFragmentedMP4Rejected(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a minimal fragmented MP4 (just ftyp + moof headers).
-	// ftyp box: 8-byte header + "isom" + minor version = 20 bytes.
 	data := make([]byte, 0, 40)
-	// ftyp box (20 bytes): size=20, "ftyp", "isom", minor=0, no compat brands.
 	data = append(data, 0, 0, 0, 20, 'f', 't', 'y', 'p')
 	data = append(data, 'i', 's', 'o', 'm')
-	data = append(data, 0, 0, 0, 0)       // minor version
-	data = append(data, 'i', 's', 'o', 'm') // compatible brand
-
-	// moof box (8 bytes): size=8, "moof".
+	data = append(data, 0, 0, 0, 0)
+	data = append(data, 'i', 's', 'o', 'm')
 	data = append(data, 0, 0, 0, 8, 'm', 'o', 'o', 'f')
 
 	_, err := Decode(Options{
-		R:       readerSeekerFromBytes(data),
-		Sources: CONFIG,
-		HandleTag: func(ti TagInfo) error {
-			return nil
-		},
+		R:         readerSeekerFromBytes(data),
+		Sources:   CONFIG,
+		HandleTag: func(ti TagInfo) error { return nil },
 	})
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(IsInvalidFormat(err), qt.IsTrue)
@@ -205,14 +184,87 @@ func TestDecodeAutoDetectFormat(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer f.Close()
 
-	// No VideoFormat specified — should auto-detect.
 	result, err := Decode(Options{
+		R:         f,
+		Sources:   CONFIG,
+		HandleTag: func(ti TagInfo) error { return nil },
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.VideoConfig.Width, qt.Equals, 320)
+}
+
+// Validates: REQ-API-11
+func TestTagsGetDateTime(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer f.Close()
+
+	tags, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
+	c.Assert(err, qt.IsNil)
+
+	dt, err := tags.GetDateTime()
+	c.Assert(err, qt.IsNil)
+	c.Assert(dt.Year(), qt.Equals, 2024)
+	c.Assert(dt.Month(), qt.Equals, time.Month(6))
+	c.Assert(dt.Day(), qt.Equals, 15)
+}
+
+// Validates: REQ-API-12
+func TestTagsGetDateTimeUTC(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer f.Close()
+
+	tags, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
+	c.Assert(err, qt.IsNil)
+
+	dt, err := tags.GetDateTimeUTC()
+	c.Assert(err, qt.IsNil)
+	c.Assert(dt.Location(), qt.Equals, time.UTC)
+}
+
+// Validates: REQ-API-10
+func TestDecodeTimeout(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer f.Close()
+
+	_, err = Decode(Options{
+		R:         f,
+		Sources:   CONFIG,
+		Timeout:   5 * time.Second,
+		HandleTag: func(ti TagInfo) error { return nil },
+	})
+	c.Assert(err, qt.IsNil)
+}
+
+// Validates: REQ-API-07
+func TestShouldHandleTag(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer f.Close()
+
+	tags := make(map[string]TagInfo)
+	_, err = Decode(Options{
 		R:       f,
-		Sources: CONFIG,
+		Sources: QUICKTIME,
+		ShouldHandleTag: func(ti TagInfo) bool {
+			return ti.Tag == "TimeScale"
+		},
 		HandleTag: func(ti TagInfo) error {
+			tags[ti.Tag] = ti
 			return nil
 		},
 	})
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.VideoConfig.Width, qt.Equals, 320)
+	c.Assert(len(tags), qt.Equals, 1)
+	c.Assert(tags["TimeScale"].Value, qt.Equals, uint32(1000))
 }
