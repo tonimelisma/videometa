@@ -124,7 +124,7 @@ func Decode(opts Options) (result DecodeResult, err error) {
 	// Wrap reader in streamReader.
 	sr := newStreamReader(opts.R)
 
-	// Recover panics from streamReader's stop() calls.
+	// Recover panics from streamReader's stop() calls and HandleTag errors.
 	defer func() {
 		if r := recover(); r != nil {
 			if r == errStop {
@@ -135,6 +135,12 @@ func Decode(opts Options) (result DecodeResult, err error) {
 						err = sr.readErr
 					}
 				}
+			} else if e, ok := r.(error); ok && errors.Is(e, ErrStopWalking) {
+				// ErrStopWalking panicked from HandleTag callback — not an error.
+				err = nil
+			} else if e, ok := r.(error); ok {
+				// Other errors panicked from HandleTag — propagate.
+				err = e
 			} else {
 				// Re-panic for unexpected panics.
 				panic(r)
