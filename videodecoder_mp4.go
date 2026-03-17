@@ -48,6 +48,8 @@ func (d *videoDecoderMP4) decode() error {
 			if err := d.decodeMoov(startPos, boxSize); err != nil {
 				return err
 			}
+		case "uuid":
+			d.decodeUUID(startPos, boxSize)
 		case "moof":
 			return newInvalidFormatErrorf("fragmented MP4 (moof box) not supported")
 		case "mdat", "free", "skip", "wide":
@@ -507,6 +509,28 @@ func (d *videoDecoderMP4) decodeMetaHdlr(hdlrStart int64, hdlrSize uint64) {
 			d.emitQuickTimeTag("HandlerDescription", description)
 		}
 	}
+}
+
+// decodeUUID handles UUID extended-type boxes. XMP and EXIF data in MP4
+// can be stored in UUID boxes identified by specific 16-byte GUIDs.
+func (d *videoDecoderMP4) decodeUUID(startPos int64, boxSize uint64) {
+	// The UUID is the first 16 bytes after the standard 8-byte box header.
+	var uuid [16]byte
+	d.readBytesInto(uuid[:])
+
+	// Remaining data length = box size - 8 (header) - 16 (UUID).
+	dataLen := int64(boxSize) - 24
+	if dataLen <= 0 {
+		return
+	}
+
+	if uuid == xmpUUID && d.opts.Sources.Has(XMP) {
+		// XMP data follows the UUID.
+		rc := d.bufferedReader(int(dataLen))
+		defer rc.Close()
+		d.decodeXMP(rc)
+	}
+	// EXIF UUID handling will be added in Milestone 5.
 }
 
 // emitQuickTimeTag sends a QuickTime source tag to the callback.
