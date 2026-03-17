@@ -1,20 +1,5 @@
 [{
   "SourceFile": "../testdata/minimal.mp4",
-  "ExifTool": {
-    "ExifToolVersion": 13.50
-  },
-  "File": {
-    "FileName": "minimal.mp4",
-    "Directory": "../testdata",
-    "FileSize": 2319,
-    "FileModifyDate": "2026:03:17 00:52:37-06:00",
-    "FileAccessDate": "2026:03:17 00:53:01-06:00",
-    "FileInodeChangeDate": "2026:03:17 00:52:37-06:00",
-    "FilePermissions": 100644,
-    "FileType": "MP4",
-    "FileTypeExtension": "MP4",
-    "MIMEType": "video/mp4"
-  },
   "QuickTime": {
     "MajorBrand": "isom",
     "MinorVersion": "0.2.0",

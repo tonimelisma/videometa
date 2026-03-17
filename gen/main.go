@@ -42,7 +42,9 @@ func main() {
 		goldenPath := filepath.Join(testdataDir, e.Name()+".exiftool.json")
 
 		// Run exiftool -n -json to get numeric values.
-		cmd := exec.Command("exiftool", "-n", "-json", "-g", videoPath)
+		// Exclude File group (filesystem timestamps change per environment)
+		// and ExifTool group (version-dependent).
+		cmd := exec.Command("exiftool", "-n", "-json", "-g", "--File:all", "--ExifTool:all", videoPath)
 		output, err := cmd.Output()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "exiftool %s: %v\n", e.Name(), err)

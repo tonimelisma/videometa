@@ -3,6 +3,7 @@ package videometa
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"time"
 )
 
@@ -524,13 +525,27 @@ func (d *videoDecoderMP4) decodeUUID(startPos int64, boxSize uint64) {
 		return
 	}
 
-	if uuid == xmpUUID && d.opts.Sources.Has(XMP) {
-		// XMP data follows the UUID.
-		rc := d.bufferedReader(int(dataLen))
-		defer rc.Close()
-		d.decodeXMP(rc)
+	switch uuid {
+	case xmpUUID:
+		if d.opts.Sources.Has(XMP) {
+			rc := d.bufferedReader(int(dataLen))
+			defer rc.Close()
+			d.decodeXMP(rc)
+		}
+	case exifUUID:
+		if d.opts.Sources.Has(EXIF) {
+			// EXIF in MP4 UUID box has a 4-byte header offset prefix.
+			headerOffset := d.read4()
+			rc := d.bufferedReader(int(dataLen) - 4)
+			defer rc.Close()
+			// Skip the header offset bytes within the buffered reader.
+			if headerOffset > 0 {
+				buf := make([]byte, headerOffset)
+				io.ReadFull(rc, buf)
+			}
+			d.decodeEXIF(rc)
+		}
 	}
-	// EXIF UUID handling will be added in Milestone 5.
 }
 
 // emitQuickTimeTag sends a QuickTime source tag to the callback.
