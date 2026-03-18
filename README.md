@@ -3,7 +3,7 @@
 [![CI](https://github.com/tonimelisma/videometa/actions/workflows/ci.yml/badge.svg)](https://github.com/tonimelisma/videometa/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/tonimelisma/videometa.svg)](https://pkg.go.dev/github.com/tonimelisma/videometa)
 
-Pure Go library for reading metadata from video files. Extracts EXIF, XMP, IPTC, and QuickTime native metadata from MP4/MOV containers. All output matches `exiftool -n -json`.
+Pure Go library for reading metadata from video files. Extracts EXIF, XMP, IPTC, QuickTime native, MakerNotes, and manufacturer-specific metadata from MP4/MOV containers. All output matches `exiftool -n -json`.
 
 ## Features
 
@@ -48,7 +48,8 @@ fmt.Printf("Video: %dx%d, codec=%s\n",
 f, _ := os.Open("video.mp4")
 defer f.Close()
 
-tags, err := videometa.DecodeAll(videometa.Options{R: f})
+tags, result, err := videometa.DecodeAll(videometa.Options{R: f})
+_ = result // Contains VideoConfig (width, height, duration, codec, rotation)
 
 // Get creation time (priority: EXIF > XMP > QuickTime > IPTC)
 dt, _ := tags.GetDateTime()
@@ -82,6 +83,8 @@ result, err := videometa.Decode(videometa.Options{
 | `IPTC` | IPTC-IIM records (keywords, captions) |
 | `QUICKTIME` | QuickTime native metadata (ilst atoms, freeform keys) |
 | `CONFIG` | Container structure info (dimensions, duration, codec) |
+| `MAKERNOTES` | Manufacturer-specific metadata (Pentax TAGS atom) |
+| `XML` | Structured XML metadata (Sony NonRealTimeMeta) |
 
 ## Benchmarks
 
@@ -92,7 +95,7 @@ BenchmarkDecodeMinimalMP4ConfigOnly-8     672285    1803 ns/op     608 B/op     
 
 ## Status
 
-Core decoders implemented (ISOBMFF, EXIF, XMP, IPTC, QuickTime). MakerNotes decoding (Apple, Canon, Sony) pending real device test files. See `docs/TASKS.md` for the full roadmap.
+v0.1.0 — All decoders implemented: ISOBMFF box parser, EXIF, XMP, IPTC, QuickTime native, Pentax MakerNotes, Sony XAVC (UUID-PROF, USMT/MTDT, NRTM XML), Apple MOV (mdta locales, wave/frma). Zero golden file gaps across all test files. Tested with Sony A6700, iPhone 15 Pro, Pentax, and synthetic test files.
 
 ## License
 

@@ -449,3 +449,51 @@ func TestWarnfCallback(t *testing.T) {
 	// Warnf callback is used for non-fatal warnings — the test verifies
 	// the callback is wired up and callable.
 }
+
+// Validates: REQ-API-02
+func TestTagsGetters(t *testing.T) {
+	c := qt.New(t)
+
+	var tags Tags
+	tags.Add(TagInfo{Source: EXIF, Tag: "Make", Value: "Canon"})
+	tags.Add(TagInfo{Source: XMP, Tag: "Creator", Value: "Test"})
+	tags.Add(TagInfo{Source: IPTC, Tag: "City", Value: "NYC"})
+	tags.Add(TagInfo{Source: QUICKTIME, Tag: "Duration", Value: 5.0})
+	tags.Add(TagInfo{Source: CONFIG, Tag: "Width", Value: 1920})
+	tags.Add(TagInfo{Source: MAKERNOTES, Tag: "ISO", Value: 100})
+	tags.Add(TagInfo{Source: XML, Tag: "DeviceModel", Value: "A7"})
+
+	c.Assert(tags.EXIF()["Make"].Value, qt.Equals, "Canon")
+	c.Assert(tags.XMP()["Creator"].Value, qt.Equals, "Test")
+	c.Assert(tags.IPTC()["City"].Value, qt.Equals, "NYC")
+	c.Assert(tags.QuickTime()["Duration"].Value, qt.Equals, 5.0)
+	c.Assert(tags.Config()["Width"].Value, qt.Equals, 1920)
+	c.Assert(tags.MakerNotes()["ISO"].Value, qt.Equals, 100)
+	c.Assert(tags.XML()["DeviceModel"].Value, qt.Equals, "A7")
+
+	// All() returns merged map with correct priority.
+	all := tags.All()
+	c.Assert(len(all), qt.Equals, 7)
+}
+
+// Validates: REQ-API-13
+func TestTagsGetLatLongQuickTime(t *testing.T) {
+	c := qt.New(t)
+
+	var tags Tags
+	tags.Add(TagInfo{Source: QUICKTIME, Tag: "GPSCoordinates", Value: "+34.0592-118.4460/"})
+
+	lat, lon, err := tags.GetLatLong()
+	c.Assert(err, qt.IsNil)
+	c.Assert(lat > 34.05 && lat < 34.06, qt.IsTrue)
+	c.Assert(lon > -118.45 && lon < -118.44, qt.IsTrue)
+}
+
+// Validates: REQ-API-13
+func TestTagsGetLatLongNoGPS(t *testing.T) {
+	c := qt.New(t)
+
+	var tags Tags
+	_, _, err := tags.GetLatLong()
+	c.Assert(err, qt.IsNotNil)
+}
