@@ -19,10 +19,11 @@ jobs:
       - name: Install exiftool
         run: |
           # Pin exiftool version to match local dev (golden files depend on exact output).
-          wget -q https://exiftool.org/Image-ExifTool-13.50.tar.gz
-          tar xzf Image-ExifTool-13.50.tar.gz
-          sudo cp -r Image-ExifTool-13.50/lib/* /usr/share/perl5/
-          sudo cp Image-ExifTool-13.50/exiftool /usr/local/bin/
+          curl -sL https://github.com/exiftool/exiftool/archive/refs/tags/13.50.tar.gz -o exiftool.tar.gz
+          tar xzf exiftool.tar.gz
+          sudo cp -r exiftool-13.50/lib/* /usr/share/perl5/
+          sudo cp exiftool-13.50/exiftool /usr/local/bin/
+          sudo chmod +x /usr/local/bin/exiftool
           exiftool -ver
 
       - name: Build
