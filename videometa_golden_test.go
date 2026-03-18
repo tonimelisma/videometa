@@ -91,7 +91,7 @@ func TestGoldenWithGPSGetDateTime(t *testing.T) {
 	c.Assert(dt.Day(), qt.Equals, 15)
 }
 
-// Validates: REQ-NF-04
+// Validates: REQ-NF-04, REQ-QT-04
 func TestGoldenExifToolQuickTimeMOV(t *testing.T) {
 	c := qt.New(t)
 
@@ -102,17 +102,35 @@ func TestGoldenExifToolQuickTimeMOV(t *testing.T) {
 	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME | CONFIG})
 	c.Assert(err, qt.IsNil)
 
-	// This file is from exiftool test suite — rich QuickTime metadata.
-	qtTags := tags.QuickTime()
+	golden := loadGolden(c, "testdata/exiftool_quicktime.mov.exiftool.json")
+	qtGolden := golden["QuickTime"].(map[string]any)
 
-	// Should have parsed basic QuickTime structure.
+	qtTags := tags.QuickTime()
 	c.Assert(len(qtTags) > 0, qt.IsTrue, qt.Commentf("expected QuickTime tags from exiftool test MOV"))
 
-	// Check codec.
-	all := tags.All()
-	ts, ok := all["TimeScale"]
+	// Basic structure.
+	c.Assert(qtTags["TimeScale"].Value, qt.Equals, uint32(600))
+
+	// Audio tags — this MOV has a raw audio track.
+	compareGoldenTag(c, qtTags, qtGolden, "AudioFormat")
+	compareGoldenNumTag(c, qtTags, qtGolden, "AudioChannels")
+	compareGoldenNumTag(c, qtTags, qtGolden, "AudioBitsPerSample")
+	compareGoldenNumTag(c, qtTags, qtGolden, "AudioSampleRate")
+	compareGoldenNumTag(c, qtTags, qtGolden, "Balance")
+
+	// HandlerClass from mdia hdlr.
+	compareGoldenTag(c, qtTags, qtGolden, "HandlerClass")
+
+	// ImageWidth/Height should be from video track, not overwritten by audio track.
+	c.Assert(qtTags["ImageWidth"].Value, qt.Equals, int(qtGolden["ImageWidth"].(float64)))
+	c.Assert(qtTags["ImageHeight"].Value, qt.Equals, int(qtGolden["ImageHeight"].(float64)))
+
+	// TrackDuration uses movie timescale (600), not hardcoded 1000.
+	trackDur, ok := qtTags["TrackDuration"]
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(ts.Value, qt.Equals, uint32(600))
+	goldenDur := qtGolden["TrackDuration"].(float64)
+	c.Assert(math.Abs(trackDur.Value.(float64)-goldenDur) < 0.01, qt.IsTrue,
+		qt.Commentf("TrackDuration: got %v, want %v", trackDur.Value, goldenDur))
 }
 
 // Validates: REQ-NF-04
@@ -147,6 +165,92 @@ func TestGoldenMinimalMP4AllQuickTimeTags(t *testing.T) {
 	c.Assert(qtTags["BitDepth"].Value, qt.Equals, int(qtGolden["BitDepth"].(float64)))
 	c.Assert(qtTags["XResolution"].Value, qt.Equals, int(qtGolden["XResolution"].(float64)))
 	c.Assert(qtTags["YResolution"].Value, qt.Equals, int(qtGolden["YResolution"].(float64)))
+
+	// CompatibleBrands — verify our []string matches golden's []any.
+	cb, ok := qtTags["CompatibleBrands"]
+	c.Assert(ok, qt.IsTrue, qt.Commentf("missing CompatibleBrands tag"))
+	cbSlice, ok := cb.Value.([]string)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("CompatibleBrands should be []string"))
+	goldenBrands := qtGolden["CompatibleBrands"].([]any)
+	c.Assert(len(cbSlice), qt.Equals, len(goldenBrands))
+	for i, gb := range goldenBrands {
+		c.Assert(cbSlice[i], qt.Equals, gb.(string), qt.Commentf("CompatibleBrands[%d]", i))
+	}
+}
+
+// Validates: REQ-NF-04, REQ-QT-04
+func TestGoldenWithAudioMP4(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/with_audio.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	tags, result, err := DecodeAll(Options{R: f, Sources: QUICKTIME | CONFIG})
+	c.Assert(err, qt.IsNil)
+
+	golden := loadGolden(c, "testdata/with_audio.mp4.exiftool.json")
+	qtGolden := golden["QuickTime"].(map[string]any)
+
+	qtTags := tags.QuickTime()
+
+	// Video tags should be present and correct.
+	c.Assert(result.VideoConfig.Width, qt.Equals, 320)
+	c.Assert(result.VideoConfig.Height, qt.Equals, 240)
+	c.Assert(result.VideoConfig.Codec, qt.Equals, "avc1")
+	c.Assert(qtTags["ImageWidth"].Value, qt.Equals, 320)
+	c.Assert(qtTags["ImageHeight"].Value, qt.Equals, 240)
+	compareGoldenTag(c, qtTags, qtGolden, "CompressorID")
+
+	// Audio tags from the audio track.
+	compareGoldenTag(c, qtTags, qtGolden, "AudioFormat")
+	compareGoldenNumTag(c, qtTags, qtGolden, "AudioChannels")
+	compareGoldenNumTag(c, qtTags, qtGolden, "AudioBitsPerSample")
+	compareGoldenNumTag(c, qtTags, qtGolden, "AudioSampleRate")
+	compareGoldenNumTag(c, qtTags, qtGolden, "Balance")
+
+	// VideoFrameRate should be present (from stts of video track).
+	c.Assert(qtTags["VideoFrameRate"].Value, qt.Equals, float64(qtGolden["VideoFrameRate"].(float64)))
+}
+
+// Validates: REQ-NF-04
+func TestGoldenSonyA6700(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/sony_a6700.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	tags, result, err := DecodeAll(Options{R: f, Sources: QUICKTIME | CONFIG})
+	c.Assert(err, qt.IsNil)
+
+	golden := loadGolden(c, "testdata/sony_a6700.mp4.exiftool.json")
+	qtGolden := golden["QuickTime"].(map[string]any)
+
+	qtTags := tags.QuickTime()
+
+	// HEVC codec + 4K dimensions.
+	c.Assert(result.VideoConfig.Codec, qt.Equals, "hvc1")
+	c.Assert(result.VideoConfig.Width, qt.Equals, 3840)
+	c.Assert(result.VideoConfig.Height, qt.Equals, 2160)
+	compareGoldenTag(c, qtTags, qtGolden, "MajorBrand")
+	compareGoldenTag(c, qtTags, qtGolden, "CompressorID")
+	c.Assert(qtTags["ImageWidth"].Value, qt.Equals, int(qtGolden["ImageWidth"].(float64)))
+	c.Assert(qtTags["ImageHeight"].Value, qt.Equals, int(qtGolden["ImageHeight"].(float64)))
+
+	// LPCM audio track.
+	compareGoldenTag(c, qtTags, qtGolden, "AudioFormat")
+	compareGoldenNumTag(c, qtTags, qtGolden, "AudioChannels")
+	compareGoldenNumTag(c, qtTags, qtGolden, "AudioBitsPerSample")
+	compareGoldenNumTag(c, qtTags, qtGolden, "AudioSampleRate")
+	compareGoldenNumTag(c, qtTags, qtGolden, "Balance")
+
+	// TrackDuration should use movie timescale (60000).
+	trackDur, ok := qtTags["TrackDuration"]
+	c.Assert(ok, qt.IsTrue)
+	goldenDur := qtGolden["TrackDuration"].(float64)
+	c.Assert(math.Abs(trackDur.Value.(float64)-goldenDur) < 0.01, qt.IsTrue,
+		qt.Commentf("TrackDuration: got %v, want %v", trackDur.Value, goldenDur))
 }
 
 // compareGoldenTag checks that a string-valued tag matches the golden file.
@@ -158,6 +262,21 @@ func compareGoldenTag(c *qt.C, tags map[string]TagInfo, golden map[string]any, n
 	c.Assert(ok, qt.IsTrue, qt.Commentf("missing golden tag %q", name))
 	c.Assert(toString(tag.Value), qt.Equals, toString(goldenVal),
 		qt.Commentf("tag %q: got %v, want %v", name, tag.Value, goldenVal))
+}
+
+// compareGoldenNumTag checks that a numeric tag's value matches the golden float64.
+func compareGoldenNumTag(c *qt.C, tags map[string]TagInfo, golden map[string]any, name string) {
+	c.Helper()
+	tag, ok := tags[name]
+	c.Assert(ok, qt.IsTrue, qt.Commentf("missing tag %q", name))
+	goldenVal, ok := golden[name]
+	c.Assert(ok, qt.IsTrue, qt.Commentf("missing golden tag %q", name))
+	tagFloat, ok := toFloat64(tag.Value)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("tag %q: cannot convert %T to float64", name, tag.Value))
+	goldenFloat, ok := toFloat64(goldenVal)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("golden %q: cannot convert %T to float64", name, goldenVal))
+	c.Assert(math.Abs(tagFloat-goldenFloat) < 0.001, qt.IsTrue,
+		qt.Commentf("tag %q: got %v, want %v", name, tagFloat, goldenFloat))
 }
 
 func loadGolden(c *qt.C, path string) map[string]any {

@@ -77,6 +77,8 @@ type Options struct {
 	Warnf func(format string, args ...any)
 
 	// Timeout bounds total decode time. Zero means no timeout.
+	// Warning: when a timeout fires, DecodeResult may contain partial data
+	// because the decode goroutine continues running briefly after cancellation.
 	Timeout time.Duration
 
 	// LimitNumTags caps total tags delivered. Default 5000.

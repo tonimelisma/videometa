@@ -13,6 +13,8 @@ func FuzzDecodeMP4(f *testing.F) {
 		"testdata/minimal.mp4",
 		"testdata/nonfaststart.mp4",
 		"testdata/truncated.mp4",
+		"testdata/with_audio.mp4",
+		"testdata/sony_a6700.mp4",
 	}
 	for _, path := range seeds {
 		data, err := os.ReadFile(path)
