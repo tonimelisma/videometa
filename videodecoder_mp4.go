@@ -58,6 +58,8 @@ func (d *videoDecoderMP4) decode() error {
 			d.decodeUUID(startPos, boxSize)
 		case "moof":
 			return newInvalidFormatErrorf("fragmented MP4 (moof box) not supported")
+		case "meta":
+			d.decodeMeta(startPos, boxSize)
 		case "mdat":
 			// Record mdat position/size for MediaDataOffset/MediaDataSize tags.
 			d.mdatOffset = startPos
@@ -273,6 +275,8 @@ func (d *videoDecoderMP4) decodeTrak(trakStart int64, trakSize uint64) {
 		switch boxType.String() {
 		case "tkhd":
 			d.decodeTkhd()
+		case "tapt":
+			d.decodeTapt(startPos, boxSize)
 		case "mdia":
 			d.decodeMdia(startPos, boxSize)
 		}
@@ -353,6 +357,46 @@ func (d *videoDecoderMP4) decodeTkhd() {
 			d.emitQuickTimeTag("ImageHeight", height)
 		}
 		d.emitQuickTimeTag("MatrixStructure", formatMatrix(matrix))
+	}
+}
+
+// decodeTapt parses the track aperture mode dimensions container box (QuickTime-specific).
+// Contains clef, prof, and enof children for clean, production, and encoded dimensions.
+func (d *videoDecoderMP4) decodeTapt(taptStart int64, taptSize uint64) {
+	taptEnd := taptStart + int64(taptSize)
+	for d.pos() < taptEnd {
+		startPos := d.pos()
+		boxSize, boxType, isEOF := d.readBoxHeader()
+		if isEOF {
+			break
+		}
+
+		switch boxType.String() {
+		case "clef":
+			d.decodeTaptDimension("CleanApertureDimensions")
+		case "prof":
+			d.decodeTaptDimension("ProductionApertureDimensions")
+		case "enof":
+			d.decodeTaptDimension("EncodedPixelsDimensions")
+		}
+
+		d.seekToBoxEnd(startPos, boxSize)
+	}
+}
+
+// decodeTaptDimension reads a tapt dimension box (clef/prof/enof).
+// Layout: version+flags(4), width(4 fixed 16.16), height(4 fixed 16.16).
+// Emits as "W H" string matching exiftool format.
+func (d *videoDecoderMP4) decodeTaptDimension(tagName string) {
+	_ = d.readBytes(4) // version + flags
+	widthFixed := d.read4()
+	heightFixed := d.read4()
+
+	width := int(widthFixed >> 16)
+	height := int(heightFixed >> 16)
+
+	if d.opts.Sources.Has(QUICKTIME) {
+		d.emitQuickTimeTag(tagName, fmt.Sprintf("%d %d", width, height))
 	}
 }
 
@@ -600,10 +644,14 @@ func (d *videoDecoderMP4) decodeStsd(stsdStart int64, stsdSize uint64) {
 }
 
 // decodeVisualSampleEntry parses the visual sample entry fields (ISO 14496-12 §12.1.3).
+// The first 16 bytes after the common sample entry header are pre_defined/reserved in ISO,
+// but in QuickTime they carry version(2), revision(2), vendor(4), temporal_quality(4),
+// spatial_quality(4). We read vendor as VendorID for MOV files.
 func (d *videoDecoderMP4) decodeVisualSampleEntry(entryStart int64, entrySize uint32) {
-	_ = d.readBytes(2)  // pre_defined
-	_ = d.readBytes(2)  // reserved
-	_ = d.readBytes(12) // pre_defined
+	_ = d.read2()              // version (pre_defined in ISO)
+	_ = d.read2()              // revision (reserved in ISO)
+	vendorID := d.readFourCC() // vendor (pre_defined in ISO)
+	_ = d.readBytes(8)         // temporal_quality + spatial_quality (pre_defined in ISO)
 
 	width := d.read2()
 	height := d.read2()
@@ -625,6 +673,10 @@ func (d *videoDecoderMP4) decodeVisualSampleEntry(entryStart int64, entrySize ui
 	_ = d.read2() // pre_defined
 
 	if d.opts.Sources.Has(QUICKTIME) {
+		vid := vendorID.String()
+		if vid != "\x00\x00\x00\x00" {
+			d.emitQuickTimeTag("VendorID", vid)
+		}
 		d.emitQuickTimeTag("SourceImageWidth", int(width))
 		d.emitQuickTimeTag("SourceImageHeight", int(height))
 		d.emitQuickTimeTag("XResolution", fixedPoint1616ToInt(horizRes))
@@ -634,11 +686,6 @@ func (d *videoDecoderMP4) decodeVisualSampleEntry(entryStart int64, entrySize ui
 		}
 		d.emitQuickTimeTag("BitDepth", int(bitDepth))
 	}
-
-	// TODO: Parse VendorID from QuickTime visual sample entry extension
-	// (4 bytes after pre_defined, present in MOV but not ISO MP4).
-	// TODO: Parse clap/prod/encd sub-boxes for CleanApertureDimensions,
-	// ProductionApertureDimensions, EncodedPixelsDimensions.
 
 	// Parse sub-boxes within the sample entry (pasp, btrt, etc.).
 	entryEnd := entryStart + int64(entrySize)

@@ -118,6 +118,14 @@ func TestGoldenExifToolQuickTimeMOV(t *testing.T) {
 	compareGoldenNumTag(c, qtTags, qtGolden, "AudioSampleRate")
 	compareGoldenNumTag(c, qtTags, qtGolden, "Balance")
 
+	// VendorID from visual sample entry.
+	compareGoldenTag(c, qtTags, qtGolden, "VendorID")
+
+	// Track aperture mode dimensions from tapt box.
+	compareGoldenTag(c, qtTags, qtGolden, "CleanApertureDimensions")
+	compareGoldenTag(c, qtTags, qtGolden, "ProductionApertureDimensions")
+	compareGoldenTag(c, qtTags, qtGolden, "EncodedPixelsDimensions")
+
 	// HandlerClass from mdia hdlr.
 	compareGoldenTag(c, qtTags, qtGolden, "HandlerClass")
 
