@@ -1,7 +1,6 @@
 package videometa
 
 import (
-	"fmt"
 	"io"
 	"strings"
 )
@@ -148,23 +147,14 @@ func decodeISO88591(b []byte) string {
 	return sb.String()
 }
 
-// emitIPTCTag sends an IPTC source tag to the callback.
+// emitIPTCTag sends an IPTC source tag via the centralized emitTag.
 func (d *videoDecoderMP4) emitIPTCTag(name string, value any) {
-	if d.opts.HandleTag == nil {
-		return
-	}
-	ti := TagInfo{
+	d.emitTag(TagInfo{
 		Source:    IPTC,
 		Tag:       name,
 		Namespace: "IPTC",
 		Value:     value,
-	}
-	if d.opts.ShouldHandleTag != nil && !d.opts.ShouldHandleTag(ti) {
-		return
-	}
-	if err := d.opts.HandleTag(ti); err != nil {
-		panic(err)
-	}
+	})
 }
 
 // iptcField describes an IPTC Application Record field.
@@ -225,6 +215,3 @@ var iptcFieldDefs = map[uint8]iptcField{
 	131: {Name: "ImageOrientation"},
 	135: {Name: "LanguageIdentifier"},
 }
-
-// Suppress unused import.
-var _ = fmt.Sprintf

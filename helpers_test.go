@@ -77,11 +77,11 @@ func TestParseISO6709(t *testing.T) {
 	c := qt.New(t)
 
 	tests := []struct {
-		name     string
-		input    string
-		wantLat  float64
-		wantLon  float64
-		wantErr  bool
+		name    string
+		input   string
+		wantLat float64
+		wantLon float64
+		wantErr bool
 	}{
 		{
 			name:    "decimal with altitude",

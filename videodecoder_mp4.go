@@ -1,7 +1,6 @@
 package videometa
 
 import (
-	"encoding/binary"
 	"fmt"
 	"io"
 	"time"
@@ -28,7 +27,10 @@ var (
 // videoDecoderMP4 handles MP4/MOV container parsing and metadata routing.
 type videoDecoderMP4 struct {
 	*baseDecoder
-	isMOV bool // True if ftyp brand indicates QuickTime MOV.
+	isMOV          bool   // True if ftyp brand indicates QuickTime MOV.
+	mediaTimescale uint32 // From mdhd, used for stts frame rate calculation.
+	mdatOffset     int64  // Start offset of mdat box (0 if not seen).
+	mdatSize       uint64 // Size of mdat box payload.
 }
 
 func (d *videoDecoderMP4) decode() error {
@@ -53,14 +55,26 @@ func (d *videoDecoderMP4) decode() error {
 			d.decodeUUID(startPos, boxSize)
 		case "moof":
 			return newInvalidFormatErrorf("fragmented MP4 (moof box) not supported")
-		case "mdat", "free", "skip", "wide":
-			// Skip media data and padding boxes.
+		case "mdat":
+			// Record mdat position/size for MediaDataOffset/MediaDataSize tags.
+			d.mdatOffset = startPos
+			// Box size includes 8-byte header; payload is the rest.
+			d.mdatSize = boxSize - 8
+		case "free", "skip", "wide":
+			// Skip padding boxes.
 		default:
 			// Skip unknown top-level boxes silently.
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
 	}
+
+	// Emit mdat metadata after all boxes are processed.
+	if d.mdatOffset > 0 && d.opts.Sources.Has(QUICKTIME) {
+		d.emitQuickTimeTag("MediaDataSize", d.mdatSize)
+		d.emitQuickTimeTag("MediaDataOffset", d.mdatOffset)
+	}
+
 	return nil
 }
 
@@ -84,10 +98,11 @@ func (d *videoDecoderMP4) readBoxHeader() (totalSize uint64, boxType fourCC, isE
 	boxType = d.readFourCC()
 	totalSize = uint64(size)
 
-	if size == 1 {
+	switch size {
+	case 1:
 		// 64-bit extended size.
 		totalSize = d.read8()
-	} else if size == 0 {
+	case 0:
 		// Box extends to EOF. Use a large sentinel value.
 		// This is only valid for the last box (typically mdat).
 		totalSize = 1<<63 - 1
@@ -105,14 +120,33 @@ func (d *videoDecoderMP4) seekToBoxEnd(startPos int64, boxSize uint64) {
 	}
 }
 
-// decodeFtyp validates the ftyp box and sets isMOV flag.
+// decodeFtyp validates the ftyp box, sets isMOV flag, and emits brand tags.
 func (d *videoDecoderMP4) decodeFtyp(startPos int64, boxSize uint64) error {
 	majorBrand := d.readFourCC()
-	_ = d.read4() // minor version
+	minorVersion := d.read4()
 
 	brandStr := majorBrand.String()
 
-	// Check major brand.
+	// Read all compatible brands.
+	endPos := startPos + int64(boxSize)
+	var compatBrands []string
+	for d.pos() < endPos {
+		compat := d.readFourCC()
+		compatBrands = append(compatBrands, compat.String())
+	}
+
+	// Emit ftyp tags before validation so they're available even for edge cases.
+	if d.opts.Sources.Has(QUICKTIME) {
+		d.emitQuickTimeTag("MajorBrand", brandStr)
+		// MinorVersion: exiftool formats as val/65536 . (val/256)%256 . val%256.
+		d.emitQuickTimeTag("MinorVersion", fmt.Sprintf("%d.%d.%d",
+			minorVersion>>16, (minorVersion>>8)&0xFF, minorVersion&0xFF))
+		if len(compatBrands) > 0 {
+			d.emitQuickTimeTag("CompatibleBrands", compatBrands)
+		}
+	}
+
+	// Validate brand.
 	if movBrands[brandStr] {
 		d.isMOV = true
 		return nil
@@ -120,17 +154,12 @@ func (d *videoDecoderMP4) decodeFtyp(startPos int64, boxSize uint64) error {
 	if mp4Brands[brandStr] {
 		return nil
 	}
-
-	// Check compatible brands.
-	endPos := startPos + int64(boxSize)
-	for d.pos() < endPos {
-		compat := d.readFourCC()
-		compatStr := compat.String()
-		if movBrands[compatStr] {
+	for _, cb := range compatBrands {
+		if movBrands[cb] {
 			d.isMOV = true
 			return nil
 		}
-		if mp4Brands[compatStr] {
+		if mp4Brands[cb] {
 			return nil
 		}
 	}
@@ -191,6 +220,7 @@ func (d *videoDecoderMP4) decodeMvhd() {
 	}
 
 	if d.opts.Sources.Has(QUICKTIME) {
+		d.emitQuickTimeTag("MovieHeaderVersion", version)
 		d.emitQuickTimeTag("CreateDate", quickTimeToTime(creationTime))
 		d.emitQuickTimeTag("ModifyDate", quickTimeToTime(modificationTime))
 		d.emitQuickTimeTag("TimeScale", timescale)
@@ -320,7 +350,7 @@ func (d *videoDecoderMP4) decodeMdia(mdiaStart int64, mdiaSize uint64) {
 		case "mdhd":
 			d.decodeMdhd()
 		case "hdlr":
-			d.decodeHdlr()
+			d.decodeHdlr(startPos, boxSize)
 		case "minf":
 			d.decodeMinf(startPos, boxSize)
 		}
@@ -354,6 +384,9 @@ func (d *videoDecoderMP4) decodeMdhd() {
 	langCode := d.read2()
 	lang := decodeISO639(langCode)
 
+	// Store for stts frame rate calculation.
+	d.mediaTimescale = timescale
+
 	if d.opts.Sources.Has(QUICKTIME) {
 		d.emitQuickTimeTag("MediaHeaderVersion", version)
 		d.emitQuickTimeTag("MediaCreateDate", quickTimeToTime(creationTime))
@@ -364,21 +397,36 @@ func (d *videoDecoderMP4) decodeMdhd() {
 	}
 }
 
-// decodeHdlr parses the handler reference box.
-func (d *videoDecoderMP4) decodeHdlr() {
+// decodeHdlr parses the handler reference box in mdia.
+// Emits HandlerClass, HandlerType, and HandlerDescription.
+func (d *videoDecoderMP4) decodeHdlr(hdlrStart int64, hdlrSize uint64) {
 	_ = d.readBytes(4) // version + flags
-	_ = d.read4()      // pre_defined
 
+	// pre_defined (Component type in QuickTime) — exiftool calls this HandlerClass.
+	handlerClass := d.readFourCC()
 	handlerType := d.readFourCC()
 
 	// Read manufacturer/vendor (12 bytes = 3 x uint32 reserved).
 	_ = d.readBytes(12)
 
-	// The rest is a null-terminated name string, but we don't know its length.
-	// We'll just skip it (the parent box size handles positioning).
+	// Read handler description — rest of box is a null-terminated string.
+	endPos := hdlrStart + int64(hdlrSize)
+	nameLen := endPos - d.pos()
+	var description string
+	if nameLen > 0 && nameLen < 256 {
+		nameBytes := d.readBytes(int(nameLen))
+		description = printableString(string(trimNulls(nameBytes)))
+	}
 
 	if d.opts.Sources.Has(QUICKTIME) {
+		hc := handlerClass.String()
+		if hc != "\x00\x00\x00\x00" {
+			d.emitQuickTimeTag("HandlerClass", hc)
+		}
 		d.emitQuickTimeTag("HandlerType", handlerType.String())
+		if description != "" {
+			d.emitQuickTimeTag("HandlerDescription", description)
+		}
 	}
 }
 
@@ -392,11 +440,28 @@ func (d *videoDecoderMP4) decodeMinf(minfStart int64, minfSize uint64) {
 			break
 		}
 
-		if boxType.String() == "stbl" {
+		switch boxType.String() {
+		case "vmhd":
+			d.decodeVmhd()
+		case "stbl":
 			d.decodeStbl(startPos, boxSize)
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
+	}
+}
+
+// decodeVmhd parses the video media header box.
+func (d *videoDecoderMP4) decodeVmhd() {
+	_ = d.readBytes(4) // version + flags
+	graphicsMode := d.read2()
+	r := d.read2()
+	g := d.read2()
+	b := d.read2()
+
+	if d.opts.Sources.Has(QUICKTIME) {
+		d.emitQuickTimeTag("GraphicsMode", graphicsMode)
+		d.emitQuickTimeTag("OpColor", fmt.Sprintf("%d %d %d", r, g, b))
 	}
 }
 
@@ -410,16 +475,41 @@ func (d *videoDecoderMP4) decodeStbl(stblStart int64, stblSize uint64) {
 			break
 		}
 
-		if boxType.String() == "stsd" {
-			d.decodeStsd()
+		switch boxType.String() {
+		case "stsd":
+			d.decodeStsd(startPos, boxSize)
+		case "stts":
+			d.decodeStts()
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
 	}
 }
 
-// decodeStsd parses the sample description box to extract codec info.
-func (d *videoDecoderMP4) decodeStsd() {
+// decodeStts parses the sample-to-time box to derive VideoFrameRate.
+func (d *videoDecoderMP4) decodeStts() {
+	_ = d.readBytes(4) // version + flags
+	entryCount := d.read4()
+
+	if entryCount == 0 || d.mediaTimescale == 0 {
+		return
+	}
+
+	// Read first entry.
+	_ = d.read4()            // sample_count
+	sampleDelta := d.read4() // sample_delta
+
+	// Only emit frame rate for constant-rate video (single entry with non-zero delta).
+	if entryCount == 1 && sampleDelta > 0 {
+		frameRate := float64(d.mediaTimescale) / float64(sampleDelta)
+		if d.opts.Sources.Has(QUICKTIME) {
+			d.emitQuickTimeTag("VideoFrameRate", frameRate)
+		}
+	}
+}
+
+// decodeStsd parses the sample description box to extract codec and visual info.
+func (d *videoDecoderMP4) decodeStsd(stsdStart int64, stsdSize uint64) {
 	_ = d.readBytes(4) // version + flags
 	entryCount := d.read4()
 
@@ -427,11 +517,12 @@ func (d *videoDecoderMP4) decodeStsd() {
 		return
 	}
 
-	// Read first sample entry.
-	_ = d.read4()             // entry size
-	codec := d.readFourCC()   // codec fourCC (e.g., "avc1", "hvc1")
-	_ = d.readBytes(6)        // reserved
-	_ = d.read2()             // data reference index
+	// Read first sample entry header.
+	entrySize := d.read4()
+	codec := d.readFourCC()    // codec fourCC (e.g., "avc1", "hvc1")
+	_ = d.readBytes(6)         // reserved
+	_ = d.read2()              // data reference index
+	entryStart := d.pos() - 16 // 4 (size) + 4 (type) + 6 (reserved) + 2 (data ref idx)
 
 	// Set codec in VideoConfig (first track only).
 	if d.result.VideoConfig.Codec == "" {
@@ -440,6 +531,82 @@ func (d *videoDecoderMP4) decodeStsd() {
 
 	if d.opts.Sources.Has(QUICKTIME) {
 		d.emitQuickTimeTag("CompressorID", codec.String())
+	}
+
+	// Parse visual sample entry fields (ISO 14496-12 §12.1.3).
+	// This fixed structure follows the common sample entry header.
+	_ = d.readBytes(2)  // pre_defined
+	_ = d.readBytes(2)  // reserved
+	_ = d.readBytes(12) // pre_defined
+
+	width := d.read2()
+	height := d.read2()
+	horizRes := d.read4() // 16.16 fixed point
+	vertRes := d.read4()  // 16.16 fixed point
+	_ = d.read4()         // reserved (data size)
+	_ = d.read2()         // frame_count
+
+	// CompressorName is a pascal string: first byte is length, then that many chars.
+	var compNameBuf [32]byte
+	d.readBytesInto(compNameBuf[:])
+	nameLen := int(compNameBuf[0])
+	compName := ""
+	if nameLen > 0 && nameLen <= 31 {
+		compName = printableString(string(compNameBuf[1 : 1+nameLen]))
+	}
+
+	bitDepth := d.read2()
+	_ = d.read2() // pre_defined
+
+	if d.opts.Sources.Has(QUICKTIME) {
+		d.emitQuickTimeTag("SourceImageWidth", int(width))
+		d.emitQuickTimeTag("SourceImageHeight", int(height))
+		d.emitQuickTimeTag("XResolution", fixedPoint1616ToInt(horizRes))
+		d.emitQuickTimeTag("YResolution", fixedPoint1616ToInt(vertRes))
+		if compName != "" {
+			d.emitQuickTimeTag("CompressorName", compName)
+		}
+		d.emitQuickTimeTag("BitDepth", int(bitDepth))
+	}
+
+	// Parse sub-boxes within the sample entry (pasp, btrt, etc.).
+	entryEnd := entryStart + int64(entrySize)
+	for d.pos()+8 <= entryEnd {
+		subStart := d.pos()
+		subSize, subType, isEOF := d.readBoxHeader()
+		if isEOF || subSize < 8 {
+			break
+		}
+
+		switch subType.String() {
+		case "pasp":
+			d.decodePasp()
+		case "btrt":
+			d.decodeBtrt()
+		}
+
+		d.seekToBoxEnd(subStart, subSize)
+	}
+}
+
+// decodePasp parses the pixel aspect ratio box.
+func (d *videoDecoderMP4) decodePasp() {
+	hSpacing := d.read4()
+	vSpacing := d.read4()
+	if d.opts.Sources.Has(QUICKTIME) {
+		d.emitQuickTimeTag("PixelAspectRatio", fmt.Sprintf("%d:%d", hSpacing, vSpacing))
+	}
+}
+
+// decodeBtrt parses the bitrate box.
+func (d *videoDecoderMP4) decodeBtrt() {
+	bufferSize := d.read4()
+	maxBitrate := d.read4()
+	avgBitrate := d.read4()
+	if d.opts.Sources.Has(QUICKTIME) {
+		d.emitQuickTimeTag("BufferSize", bufferSize)
+		d.emitQuickTimeTag("MaxBitrate", maxBitrate)
+		d.emitQuickTimeTag("AverageBitrate", avgBitrate)
 	}
 }
 
@@ -557,7 +724,7 @@ func (d *videoDecoderMP4) decodeKeysBox(keysStart int64, keysSize uint64) []stri
 	// Index 0 is unused — keys are 1-indexed.
 	keys := make([]string, entryCount+1)
 	for i := uint32(1); i <= entryCount; i++ {
-		keySize := d.read4()     // Size including this 4 bytes + namespace(4) + key string.
+		keySize := d.read4()        // Size including this 4 bytes + namespace(4) + key string.
 		namespace := d.readFourCC() // e.g., "mdta"
 		_ = namespace
 		nameLen := int(keySize) - 8
@@ -623,42 +790,37 @@ func (d *videoDecoderMP4) decodeUUID(startPos int64, boxSize uint64) {
 	case xmpUUID:
 		if d.opts.Sources.Has(XMP) {
 			rc := d.bufferedReader(int(dataLen))
-			defer rc.Close()
-			d.decodeXMP(rc)
+			defer func() { _ = rc.Close() }()
+			_ = d.decodeXMP(rc)
 		}
 	case exifUUID:
 		if d.opts.Sources.Has(EXIF) {
 			// EXIF in MP4 UUID box has a 4-byte header offset prefix.
 			headerOffset := d.read4()
 			rc := d.bufferedReader(int(dataLen) - 4)
-			defer rc.Close()
+			defer func() { _ = rc.Close() }()
 			// Skip the header offset bytes within the buffered reader.
 			if headerOffset > 0 {
 				buf := make([]byte, headerOffset)
-				io.ReadFull(rc, buf)
+				_, _ = io.ReadFull(rc, buf)
 			}
 			d.decodeEXIF(rc)
+		}
+	default:
+		if d.opts.Warnf != nil {
+			d.opts.Warnf("decode uuid: unknown UUID box")
 		}
 	}
 }
 
-// emitQuickTimeTag sends a QuickTime source tag to the callback.
+// emitQuickTimeTag sends a QuickTime source tag via the centralized emitTag.
 func (d *videoDecoderMP4) emitQuickTimeTag(name string, value any) {
-	if d.opts.HandleTag == nil {
-		return
-	}
-	ti := TagInfo{
+	d.emitTag(TagInfo{
 		Source:    QUICKTIME,
 		Tag:       name,
 		Namespace: "QuickTime",
 		Value:     value,
-	}
-	if d.opts.ShouldHandleTag != nil && !d.opts.ShouldHandleTag(ti) {
-		return
-	}
-	if err := d.opts.HandleTag(ti); err != nil {
-		panic(err) // ErrStopWalking recovered at Decode() boundary.
-	}
+	})
 }
 
 // quickTimeToTime converts a QuickTime timestamp (seconds since 1904-01-01) to time.Time.
@@ -712,19 +874,13 @@ func matrixToRotation(m [9]int32) int {
 }
 
 // formatMatrix formats a 3x3 matrix as a space-delimited string matching exiftool.
-// Values are 16.16 fixed point, but the last row is 2.30 fixed point.
+// Elements [0..5] are 16.16 fixed point (>>16 for integer).
+// Elements [6..8] are 2.30 fixed point (>>30 for integer).
 func formatMatrix(m [9]int32) string {
 	return fmt.Sprintf("%d %d %d %d %d %d %d %d %d",
-		fixedPoint1616ToInt(uint32(m[0])),
-		fixedPoint1616ToInt(uint32(m[1])),
-		fixedPoint1616ToInt(uint32(m[2])),
-		fixedPoint1616ToInt(uint32(m[3])),
-		fixedPoint1616ToInt(uint32(m[4])),
-		fixedPoint1616ToInt(uint32(m[5])),
-		fixedPoint1616ToInt(uint32(m[6])),
-		fixedPoint1616ToInt(uint32(m[7])),
-		// Last element is 2.30 fixed point: 0x40000000 = 1.0
-		m[8]>>14, // Convert 2.30 to ~16.16 then shift
+		m[0]>>16, m[1]>>16, m[2]>>16,
+		m[3]>>16, m[4]>>16, m[5]>>16,
+		m[6]>>30, m[7]>>30, m[8]>>30,
 	)
 }
 
@@ -742,13 +898,6 @@ func decodeISO639(packed uint16) string {
 	return s
 }
 
-// readBoxHeaderFrom reads a box header, handling the "not enough data" case
-// as EOF for sub-box iteration. Uses the provided byte order.
-func (d *videoDecoderMP4) readBoxHeaderFrom(r *streamReader) (totalSize uint64, boxType fourCC, isEOF bool) {
-	_ = r
-	return d.readBoxHeader()
-}
-
 // isASCIIFourCC returns true if all 4 bytes are printable ASCII (0x20-0x7E).
 func isASCIIFourCC(fcc fourCC) bool {
 	for _, b := range fcc {
@@ -757,9 +906,4 @@ func isASCIIFourCC(fcc fourCC) bool {
 		}
 	}
 	return true
-}
-
-// Ensure big-endian is always used for ISOBMFF.
-func init() {
-	_ = binary.BigEndian
 }

@@ -25,7 +25,7 @@ func FuzzDecodeMP4(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		// Must not panic on any input.
 		r := bytes.NewReader(data)
-		Decode(Options{
+		_, _ = Decode(Options{
 			R:       r,
 			Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
 			HandleTag: func(ti TagInfo) error {
@@ -50,7 +50,7 @@ func FuzzDecodeAllMP4(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		r := bytes.NewReader(data)
-		DecodeAll(Options{
+		_, _, _ = DecodeAll(Options{
 			R:       r,
 			Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
 		})

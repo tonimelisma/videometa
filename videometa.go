@@ -16,10 +16,10 @@ type Source uint32
 
 const (
 	EXIF      Source = 1 << iota // EXIF IFD data
-	XMP                         // XMP/RDF XML
-	IPTC                        // IPTC-IIM records
-	QUICKTIME                   // QuickTime native metadata (ilst, freeform atoms)
-	CONFIG                      // Codec/dimension info from container structure
+	XMP                          // XMP/RDF XML
+	IPTC                         // IPTC-IIM records
+	QUICKTIME                    // QuickTime native metadata (ilst, freeform atoms)
+	CONFIG                       // Codec/dimension info from container structure
 )
 
 // Has reports whether s contains the given source.
@@ -327,15 +327,16 @@ func (t Tags) GetLatLong() (lat, lon float64, err error) {
 	return 0, 0, fmt.Errorf("videometa: no GPS coordinates found")
 }
 
-// DecodeAll decodes all metadata into a Tags struct.
-func DecodeAll(opts Options) (Tags, error) {
+// DecodeAll decodes all metadata into a Tags struct and returns the DecodeResult
+// containing VideoConfig (width, height, duration, codec, rotation).
+func DecodeAll(opts Options) (Tags, DecodeResult, error) {
 	var tags Tags
 	opts.HandleTag = func(ti TagInfo) error {
 		tags.Add(ti)
 		return nil
 	}
-	_, err := Decode(opts)
-	return tags, err
+	result, err := Decode(opts)
+	return tags, result, err
 }
 
 // decoder is the internal interface for format-specific decoders.
@@ -346,8 +347,44 @@ type decoder interface {
 // baseDecoder provides shared state for all format decoders.
 type baseDecoder struct {
 	*streamReader
-	opts   Options
-	result *DecodeResult
+	opts     Options
+	result   *DecodeResult
+	tagCount uint32 // Number of tags emitted so far.
+}
+
+// emitTag is the centralized tag emission method. All source-specific emit
+// methods must delegate to this. It enforces LimitNumTags and LimitTagSize.
+func (bd *baseDecoder) emitTag(ti TagInfo) {
+	if bd.opts.HandleTag == nil {
+		return
+	}
+	if bd.opts.ShouldHandleTag != nil && !bd.opts.ShouldHandleTag(ti) {
+		return
+	}
+
+	// Enforce LimitTagSize: skip oversized tags silently (like imagemeta).
+	if bd.opts.LimitTagSize > 0 {
+		switch v := ti.Value.(type) {
+		case string:
+			if uint32(len(v)) > bd.opts.LimitTagSize {
+				return
+			}
+		case []byte:
+			if uint32(len(v)) > bd.opts.LimitTagSize {
+				return
+			}
+		}
+	}
+
+	// Enforce LimitNumTags: stop decoding after limit.
+	bd.tagCount++
+	if bd.opts.LimitNumTags > 0 && bd.tagCount > bd.opts.LimitNumTags {
+		panic(ErrStopWalking)
+	}
+
+	if err := bd.opts.HandleTag(ti); err != nil {
+		panic(err)
+	}
 }
 
 // newVideoDecoderMP4 creates the MP4/MOV decoder.

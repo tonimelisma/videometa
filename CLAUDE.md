@@ -126,7 +126,7 @@ Implement from specs. Use exiftool's Perl logic as reference for edge cases and 
 
 ### Dependencies
 
-- Zero runtime dependencies except `golang.org/x/text` (IPTC charset decoding)
+- Zero runtime dependencies (IPTC charset decoding is done with stdlib)
 - Test dependencies: `frankban/quicktest`, `google/go-cmp` (following imagemeta)
 - Evaluate every new dependency for maintenance health, transitive deps, and whether the functionality justifies the coupling
 - Prefer stdlib over third-party when the stdlib solution is reasonable

@@ -12,7 +12,7 @@ import (
 // buildMinimalEXIF creates a minimal valid EXIF/TIFF structure in a byte buffer.
 func buildMinimalEXIF(byteOrder binary.ByteOrder) []byte {
 	var buf bytes.Buffer
-	w := func(v any) { binary.Write(&buf, byteOrder, v) }
+	w := func(v any) { _ = binary.Write(&buf, byteOrder, v) }
 
 	// Byte order marker.
 	if byteOrder == binary.LittleEndian {

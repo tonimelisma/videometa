@@ -71,8 +71,8 @@ func NewRat[T int32 | uint32](num, den T) (Rat[T], error) {
 	return &rat[T]{num: num / g, den: den / g}, nil
 }
 
-func (r *rat[T]) Num() T       { return r.num }
-func (r *rat[T]) Den() T       { return r.den }
+func (r *rat[T]) Num() T { return r.num }
+func (r *rat[T]) Den() T { return r.den }
 func (r *rat[T]) Float64() float64 {
 	if r.den == 0 {
 		return 0
@@ -184,10 +184,11 @@ func parseISO6709Coord(s string, isLat bool) (float64, error) {
 	}
 
 	sign := 1.0
-	if s[0] == '-' {
+	switch s[0] {
+	case '-':
 		sign = -1.0
 		s = s[1:]
-	} else if s[0] == '+' {
+	case '+':
 		s = s[1:]
 	}
 
@@ -321,17 +322,17 @@ func parseTimeString(s string) (time.Time, error) {
 	}
 
 	formats := []string{
-		"2006:01:02 15:04:05",           // EXIF
-		"2006:01:02 15:04:05-07:00",     // EXIF with timezone
-		"2006:01:02 15:04:05Z07:00",     // EXIF with Z timezone
-		"2006-01-02T15:04:05-07:00",     // ISO 8601
-		"2006-01-02T15:04:05Z07:00",     // ISO 8601 with Z
-		"2006-01-02T15:04:05-0700",      // QuickTime
-		"2006-01-02T15:04:05Z",          // ISO 8601 UTC
-		"2006-01-02T15:04:05",           // ISO 8601 no TZ
-		"2006-01-02 15:04:05",           // Simple
-		"2006:01:02",                     // Date only
-		"2006-01-02",                     // Date only ISO
+		"2006:01:02 15:04:05",       // EXIF
+		"2006:01:02 15:04:05-07:00", // EXIF with timezone
+		"2006:01:02 15:04:05Z07:00", // EXIF with Z timezone
+		"2006-01-02T15:04:05-07:00", // ISO 8601
+		"2006-01-02T15:04:05Z07:00", // ISO 8601 with Z
+		"2006-01-02T15:04:05-0700",  // QuickTime
+		"2006-01-02T15:04:05Z",      // ISO 8601 UTC
+		"2006-01-02T15:04:05",       // ISO 8601 no TZ
+		"2006-01-02 15:04:05",       // Simple
+		"2006:01:02",                // Date only
+		"2006-01-02",                // Date only ISO
 		time.RFC3339,
 		time.RFC3339Nano,
 	}
