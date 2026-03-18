@@ -17,7 +17,13 @@ jobs:
           go-version: "1.24"
 
       - name: Install exiftool
-        run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
+        run: |
+          # Pin exiftool version to match local dev (golden files depend on exact output).
+          wget -q https://exiftool.org/Image-ExifTool-13.50.tar.gz
+          tar xzf Image-ExifTool-13.50.tar.gz
+          sudo cp -r Image-ExifTool-13.50/lib/* /usr/share/perl5/
+          sudo cp Image-ExifTool-13.50/exiftool /usr/local/bin/
+          exiftool -ver
 
       - name: Build
         run: CGO_ENABLED=0 go build ./...
