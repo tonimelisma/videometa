@@ -14,3 +14,5 @@
 # Large test files (downloaded locally, not committed)
 testdata/gopro_*.mp4
 testdata/gopro_*.exiftool.json
+testdata/sony_a6700.mp4
+testdata/apple.mov

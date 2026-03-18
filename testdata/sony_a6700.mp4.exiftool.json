@@ -19,8 +19,8 @@
     "AudioAttributes": 0,
     "AudioAvgBitrate": 1536000,
     "AudioMaxBitrate": 1536000,
-    "MediaDataSize": 0,
-    "MediaDataOffset": 131064,
+    "MediaDataSize": 67108864,
+    "MediaDataOffset": 131072,
     "MovieHeaderVersion": 0,
     "CreateDate": "2026:03:18 00:43:30",
     "ModifyDate": "2026:03:18 00:43:30",
@@ -113,7 +113,7 @@
   "Composite": {
     "ImageSize": "3840 2160",
     "Megapixels": 8.2944,
-    "AvgBitrate": 0,
+    "AvgBitrate": 89389096,
     "Rotation": 0
   }
 }]
