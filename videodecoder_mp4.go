@@ -155,6 +155,8 @@ func (d *videoDecoderMP4) decodeMoov(moovStart int64, moovSize uint64) error {
 			d.decodeTrak(startPos, boxSize)
 		case "udta":
 			d.decodeUdta(startPos, boxSize)
+		case "meta":
+			d.decodeMeta(startPos, boxSize)
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
@@ -461,9 +463,31 @@ func (d *videoDecoderMP4) decodeUdta(udtaStart int64, udtaSize uint64) {
 
 // decodeMeta parses the metadata container box (FullBox: has version+flags).
 func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
-	_ = d.readBytes(4) // version + flags (FullBox header)
+	// The meta box is supposed to be a FullBox (4 bytes version+flags), but some
+	// encoders omit the FullBox header. Detect by peeking at the first 8 bytes:
+	// if they form a valid box header (reasonable size + ASCII fourcc), skip the
+	// FullBox header; otherwise consume 4 bytes as version+flags.
+	if d.canSeek {
+		peekPos := d.pos()
+		firstFour := d.read4()
+		nextFour := d.readFourCC()
+		d.seek(peekPos)
+
+		isValidBox := firstFour > 0 && firstFour < uint32(metaSize) && isASCIIFourCC(nextFour)
+		if !isValidBox {
+			_ = d.readBytes(4) // Standard FullBox — consume version+flags.
+		}
+	} else {
+		// Non-seekable: assume FullBox (most common case).
+		_ = d.readBytes(4)
+	}
 
 	metaEnd := metaStart + int64(metaSize)
+
+	// Track the handler type and keys for mdta-style metadata.
+	var handlerType string
+	var keysTable []string
+
 	for d.pos() < metaEnd {
 		startPos := d.pos()
 		boxSize, boxType, isEOF := d.readBoxHeader()
@@ -473,10 +497,16 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
 
 		switch boxType.String() {
 		case "hdlr":
-			d.decodeMetaHdlr(startPos, boxSize)
+			handlerType = d.decodeMetaHdlrReturn(startPos, boxSize)
+		case "keys":
+			keysTable = d.decodeKeysBox(startPos, boxSize)
 		case "ilst":
 			if d.opts.Sources.Has(QUICKTIME) {
-				d.decodeIlst(startPos, boxSize)
+				if handlerType == "mdta" && len(keysTable) > 0 {
+					d.decodeIlstMdta(startPos, boxSize, keysTable)
+				} else {
+					d.decodeIlst(startPos, boxSize)
+				}
 			}
 		}
 
@@ -484,8 +514,8 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
 	}
 }
 
-// decodeMetaHdlr parses the handler box inside meta.
-func (d *videoDecoderMP4) decodeMetaHdlr(hdlrStart int64, hdlrSize uint64) {
+// decodeMetaHdlrReturn parses the handler box inside meta and returns the handler type.
+func (d *videoDecoderMP4) decodeMetaHdlrReturn(hdlrStart int64, hdlrSize uint64) string {
 	_ = d.readBytes(4) // version + flags
 	_ = d.read4()      // pre_defined
 	handlerType := d.readFourCC()
@@ -510,6 +540,70 @@ func (d *videoDecoderMP4) decodeMetaHdlr(hdlrStart int64, hdlrSize uint64) {
 			d.emitQuickTimeTag("HandlerDescription", description)
 		}
 	}
+
+	return handlerType.String()
+}
+
+// decodeKeysBox parses the keys box (mdta-style metadata key definitions).
+// Returns a 1-indexed slice of key names (index 0 is unused).
+func (d *videoDecoderMP4) decodeKeysBox(keysStart int64, keysSize uint64) []string {
+	_ = d.readBytes(4) // version + flags
+	entryCount := d.read4()
+
+	if entryCount > 10000 {
+		return nil // Sanity check.
+	}
+
+	// Index 0 is unused — keys are 1-indexed.
+	keys := make([]string, entryCount+1)
+	for i := uint32(1); i <= entryCount; i++ {
+		keySize := d.read4()     // Size including this 4 bytes + namespace(4) + key string.
+		namespace := d.readFourCC() // e.g., "mdta"
+		_ = namespace
+		nameLen := int(keySize) - 8
+		if nameLen <= 0 || nameLen > 1024 {
+			break
+		}
+		keys[i] = string(d.readBytes(nameLen))
+	}
+	return keys
+}
+
+// decodeIlstMdta parses an ilst box where entries reference a keys table by 1-based index.
+func (d *videoDecoderMP4) decodeIlstMdta(ilstStart int64, ilstSize uint64, keys []string) {
+	ilstEnd := ilstStart + int64(ilstSize)
+	for d.pos() < ilstEnd {
+		atomStart := d.pos()
+		atomSize, atomType, isEOF := d.readBoxHeader()
+		if isEOF {
+			break
+		}
+		atomEnd := atomStart + int64(atomSize)
+
+		// The atom type is a big-endian uint32 index into the keys table.
+		keyIndex := uint32(atomType[0])<<24 | uint32(atomType[1])<<16 | uint32(atomType[2])<<8 | uint32(atomType[3])
+		if keyIndex > 0 && int(keyIndex) < len(keys) {
+			keyName := keys[keyIndex]
+			tagName := freeformToTagName("com.apple.quicktime", mdtaKeyToShortName(keyName))
+			if tagName != "" {
+				d.decodeIlstAtomData(atomStart, atomSize, tagName)
+			}
+		}
+
+		if d.pos() < atomEnd {
+			d.skip(atomEnd - d.pos())
+		}
+	}
+}
+
+// mdtaKeyToShortName extracts the short key name from a fully qualified mdta key.
+// E.g., "com.apple.quicktime.creationdate" → "creationdate"
+func mdtaKeyToShortName(key string) string {
+	const prefix = "com.apple.quicktime."
+	if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+		return key[len(prefix):]
+	}
+	return key
 }
 
 // decodeUUID handles UUID extended-type boxes. XMP and EXIF data in MP4
@@ -653,6 +747,16 @@ func decodeISO639(packed uint16) string {
 func (d *videoDecoderMP4) readBoxHeaderFrom(r *streamReader) (totalSize uint64, boxType fourCC, isEOF bool) {
 	_ = r
 	return d.readBoxHeader()
+}
+
+// isASCIIFourCC returns true if all 4 bytes are printable ASCII (0x20-0x7E).
+func isASCIIFourCC(fcc fourCC) bool {
+	for _, b := range fcc {
+		if b < 0x20 || b > 0x7E {
+			return false
+		}
+	}
+	return true
 }
 
 // Ensure big-endian is always used for ISOBMFF.

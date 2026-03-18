@@ -10,3 +10,7 @@
 
 # OS
 .DS_Store
+
+# Large test files (downloaded locally, not committed)
+testdata/gopro_*.mp4
+testdata/gopro_*.exiftool.json
