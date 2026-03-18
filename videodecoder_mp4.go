@@ -300,6 +300,8 @@ func (d *videoDecoderMP4) decodeTrak(trakStart int64, trakSize uint64) {
 			d.decodeTref(startPos, boxSize)
 		case "uuid":
 			d.decodeUUID(startPos, boxSize)
+		case "meta":
+			d.decodeMeta(startPos, boxSize)
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
@@ -602,17 +604,27 @@ func (d *videoDecoderMP4) decodeStts() {
 	_ = d.readBytes(4) // version + flags
 	entryCount := d.read4()
 
-	if entryCount == 0 || d.mediaTimescale == 0 {
+	if entryCount == 0 || d.mediaTimescale == 0 || d.currentHandlerType != "vide" {
 		return
 	}
 
-	// Read first entry.
-	_ = d.read4()            // sample_count
-	sampleDelta := d.read4() // sample_delta
+	if entryCount > 10000 {
+		return // Sanity check.
+	}
 
-	// Only emit frame rate for constant-rate video tracks (not audio/metadata).
-	if d.currentHandlerType == "vide" && entryCount == 1 && sampleDelta > 0 {
-		frameRate := float64(d.mediaTimescale) / float64(sampleDelta)
+	// Read all entries to compute weighted average frame rate.
+	var totalSamples uint64
+	var totalDuration uint64
+	for i := uint32(0); i < entryCount; i++ {
+		sampleCount := d.read4()
+		sampleDelta := d.read4()
+		totalSamples += uint64(sampleCount)
+		totalDuration += uint64(sampleCount) * uint64(sampleDelta)
+	}
+
+	if totalSamples > 0 && totalDuration > 0 {
+		avgDelta := float64(totalDuration) / float64(totalSamples)
+		frameRate := float64(d.mediaTimescale) / avgDelta
 		if d.opts.Sources.Has(QUICKTIME) {
 			d.emitQuickTimeTag("VideoFrameRate", frameRate)
 		}
@@ -734,23 +746,69 @@ func (d *videoDecoderMP4) decodeVisualSampleEntry(entryStart int64, entrySize ui
 }
 
 // decodeAudioSampleEntry parses the audio sample entry fields (ISO 14496-12 §12.2.3).
+// Handles QuickTime V0 and V1 audio sample entries.
 // Emits AudioChannels, AudioBitsPerSample, and AudioSampleRate.
 func (d *videoDecoderMP4) decodeAudioSampleEntry(entryStart int64, entrySize uint32) {
-	_ = d.readBytes(8) // reserved
+	// QuickTime audio sample entry: version(2)+revision(2)+vendor(4) = 8 bytes.
+	version := d.read2()
+	_ = d.read2() // revision
+	_ = d.read4() // vendor
 
 	channelCount := d.read2()
 	sampleSize := d.read2()
-	_ = d.read2() // pre_defined (compression_id)
-	_ = d.read2() // reserved (packet_size)
+	_ = d.read2() // compression_id
+	_ = d.read2() // packet_size
 
 	// Sample rate is 16.16 fixed point.
 	sampleRateFixed := d.read4()
 	sampleRate := int(sampleRateFixed >> 16)
 
+	// V1 has 4 extra uint32 fields after the standard ones.
+	if version == 1 {
+		_ = d.read4() // samplesPerPacket
+		_ = d.read4() // bytesPerPacket
+		_ = d.read4() // bytesPerFrame
+		_ = d.read4() // bytesPerSample
+	}
+
 	if d.opts.Sources.Has(QUICKTIME) {
 		d.emitQuickTimeTag("AudioChannels", int(channelCount))
 		d.emitQuickTimeTag("AudioBitsPerSample", int(sampleSize))
 		d.emitQuickTimeTag("AudioSampleRate", sampleRate)
+	}
+
+	// Parse sub-boxes (wave, esds, etc.) within the audio sample entry.
+	entryEnd := entryStart + int64(entrySize)
+	for d.pos()+8 <= entryEnd {
+		subStart := d.pos()
+		subSize, subType, isEOF := d.readBoxHeader()
+		if isEOF || subSize < 8 {
+			break
+		}
+		if subType.String() == "wave" {
+			d.decodeWave(subStart, subSize)
+		}
+		d.seekToBoxEnd(subStart, subSize)
+	}
+}
+
+// decodeWave parses the wave (sound data format) box inside audio sample entries.
+// Extracts PurchaseFileFormat from the frma (original format) sub-box.
+func (d *videoDecoderMP4) decodeWave(waveStart int64, waveSize uint64) {
+	waveEnd := waveStart + int64(waveSize)
+	for d.pos()+8 <= waveEnd {
+		subStart := d.pos()
+		subSize, subType, isEOF := d.readBoxHeader()
+		if isEOF || subSize < 8 {
+			break
+		}
+		if subType.String() == "frma" && subSize >= 12 {
+			format := d.readFourCC()
+			if d.opts.Sources.Has(QUICKTIME) {
+				d.emitQuickTimeTag("PurchaseFileFormat", format.String())
+			}
+		}
+		d.seekToBoxEnd(subStart, subSize)
 	}
 }
 
@@ -1254,8 +1312,7 @@ func (d *videoDecoderMP4) decodeUSMTUUID(dataLen int64) {
 }
 
 // decodeMTDT parses a Sony MTDT (MetaData) box.
-// Format: entry_count(2), per entry: data_size(2) + data_type(4) + language(4) + data(N).
-// The language field is 4 bytes (2 bytes language + 2 bytes country/padding).
+// Format: entry_count(2), per entry: data_size(2) + data_type(4) + language(2) + encoding(2) + data(N).
 func (d *videoDecoderMP4) decodeMTDT(payloadLen int) {
 	if payloadLen < 2 {
 		return
@@ -1267,7 +1324,8 @@ func (d *videoDecoderMP4) decodeMTDT(payloadLen int) {
 			break
 		}
 		dataType := d.read4()
-		_ = d.read4() // language + country
+		_ = d.read2() // language
+		_ = d.read2() // encoding (1=UTF-16BE, 0=binary)
 
 		valueLen := int(dataSize) - 10
 		if valueLen <= 0 {
