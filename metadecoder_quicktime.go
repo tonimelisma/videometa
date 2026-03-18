@@ -74,7 +74,7 @@ func (d *videoDecoderMP4) decodeIlstAtomData(atomStart int64, atomSize uint64, t
 
 		if dataType.String() == "data" {
 			typeIndicator := d.read4()
-			_ = d.read4() // locale
+			locale := d.read4()
 
 			valueLen := int(dataSize) - 16 // 8 (box header) + 4 (type) + 4 (locale)
 			if valueLen <= 0 {
@@ -83,7 +83,18 @@ func (d *videoDecoderMP4) decodeIlstAtomData(atomStart int64, atomSize uint64, t
 
 			value := d.decodeQTValue(typeIndicator, valueLen)
 			if value != nil {
-				d.emitQuickTimeTag(tagName, value)
+				if locale != 0 {
+					// Emit localized variant with language-country suffix,
+					// plus a synthesized default-language (unsuffixed) tag
+					// matching exiftool behavior.
+					suffix := decodeLocale(locale)
+					if suffix != "" {
+						d.emitQuickTimeTag(tagName+"-"+suffix, value)
+					}
+					d.emitQuickTimeTag(tagName, value)
+				} else {
+					d.emitQuickTimeTag(tagName, value)
+				}
 			}
 		}
 
@@ -220,6 +231,35 @@ func decodeUTF16BE(data []byte) string {
 	return string(runes)
 }
 
+// decodeLocale converts a QuickTime locale uint32 to a language-country string
+// like "eng-US". The format is: country(16 bits, ASCII) + language(16 bits, packed ISO-639).
+func decodeLocale(locale uint32) string {
+	if locale == 0 {
+		return ""
+	}
+
+	// Upper 16 bits: country code as 2 ASCII bytes.
+	countryHi := byte(locale >> 24)
+	countryLo := byte(locale >> 16)
+
+	// Lower 16 bits: packed ISO-639-2/T language (5 bits per char).
+	packed := uint16(locale & 0xFFFF)
+	c1 := byte((packed>>10)&0x1F) + 0x60
+	c2 := byte((packed>>5)&0x1F) + 0x60
+	c3 := byte(packed&0x1F) + 0x60
+	lang := string([]byte{c1, c2, c3})
+
+	if lang == "\x60\x60\x60" || lang == "und" {
+		return ""
+	}
+
+	// Append country if present and printable.
+	if countryHi >= 'A' && countryHi <= 'Z' && countryLo >= 'A' && countryLo <= 'Z' {
+		return lang + "-" + string([]byte{countryHi, countryLo})
+	}
+	return lang
+}
+
 // freeformToTagName maps com.apple.quicktime freeform atoms to exiftool tag names.
 func freeformToTagName(mean, name string) string {
 	if mean != "com.apple.quicktime" {
@@ -258,6 +298,13 @@ var freeformTagNames = map[string]string{
 	"live-photo.vitality-scoring-version":   "LivePhotoVitalityScoringVersion",
 	"content.identifier":                    "ContentIdentifier",
 	"detected-face.count":                   "DetectedFaceCount",
+	"camera.lens_model":                     "LensModel",
+	"camera.focal_length.35mm_equivalent":   "FocalLengthIn35mmFormat",
+	"camera.lens_irisfnumber":               "CameraLensIrisfnumber",
+	"location.accuracy.horizontal":          "LocationAccuracyHorizontal",
+	"full-frame-rate-playback-intent":       "FullFrameRatePlaybackIntent",
+	"apple-maker-note.74":                   "Apple-maker-note74",
+	"apple-maker-note.97":                   "Apple-maker-note97",
 }
 
 // ilstAtomToTagName maps standard ilst atom types to exiftool tag names.

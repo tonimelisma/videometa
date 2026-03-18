@@ -223,6 +223,9 @@ func TestGoldenWithAudioMP4(t *testing.T) {
 
 // Validates: REQ-NF-04
 func TestGoldenSonyA6700(t *testing.T) {
+	if _, err := os.Stat("testdata/sony_a6700.mp4"); os.IsNotExist(err) {
+		t.Skip("sony_a6700.mp4 not available (large file, not committed)")
+	}
 	c := qt.New(t)
 
 	f, err := os.Open("testdata/sony_a6700.mp4")
@@ -259,6 +262,47 @@ func TestGoldenSonyA6700(t *testing.T) {
 	goldenDur := qtGolden["TrackDuration"].(float64)
 	c.Assert(math.Abs(trackDur.Value.(float64)-goldenDur) < 0.01, qt.IsTrue,
 		qt.Commentf("TrackDuration: got %v, want %v", trackDur.Value, goldenDur))
+}
+
+// Validates: REQ-NF-04
+func TestGoldenAppleMOV(t *testing.T) {
+	if _, err := os.Stat("testdata/apple.mov"); os.IsNotExist(err) {
+		t.Skip("apple.mov not available (large file, not committed)")
+	}
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/apple.mov")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	tags, result, err := DecodeAll(Options{R: f, Sources: QUICKTIME | CONFIG})
+	c.Assert(err, qt.IsNil)
+
+	golden := loadGolden(c, "testdata/apple.mov.exiftool.json")
+	qtGolden := golden["QuickTime"].(map[string]any)
+
+	qtTags := tags.QuickTime()
+
+	// HEVC codec + 4K dimensions.
+	c.Assert(result.VideoConfig.Codec, qt.Equals, "hvc1")
+	c.Assert(result.VideoConfig.Width, qt.Equals, 3840)
+	c.Assert(result.VideoConfig.Height, qt.Equals, 2160)
+	compareGoldenTag(c, qtTags, qtGolden, "MajorBrand")
+	compareGoldenTag(c, qtTags, qtGolden, "CompressorID")
+	c.Assert(qtTags["ImageWidth"].Value, qt.Equals, int(qtGolden["ImageWidth"].(float64)))
+	c.Assert(qtTags["ImageHeight"].Value, qt.Equals, int(qtGolden["ImageHeight"].(float64)))
+
+	// Audio track.
+	compareGoldenTag(c, qtTags, qtGolden, "AudioFormat")
+	compareGoldenNumTag(c, qtTags, qtGolden, "AudioChannels")
+	compareGoldenNumTag(c, qtTags, qtGolden, "AudioBitsPerSample")
+	compareGoldenNumTag(c, qtTags, qtGolden, "AudioSampleRate")
+	compareGoldenNumTag(c, qtTags, qtGolden, "Balance")
+
+	// Apple freeform metadata.
+	compareGoldenTag(c, qtTags, qtGolden, "Make")
+	compareGoldenTag(c, qtTags, qtGolden, "Model")
+	compareGoldenTag(c, qtTags, qtGolden, "Software")
 }
 
 // compareGoldenTag checks that a string-valued tag matches the golden file.

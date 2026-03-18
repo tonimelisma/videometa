@@ -1,6 +1,8 @@
 package videometa
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"time"
@@ -8,6 +10,18 @@ import (
 
 // QuickTime epoch: 1904-01-01T00:00:00Z. Offset from Unix epoch.
 const quickTimeEpochOffset = 2082844800
+
+// UUID constants for extended-type boxes.
+var (
+	profUUID = [16]byte{
+		0x50, 0x52, 0x4F, 0x46, 0x21, 0xD2, 0x4F, 0xCE,
+		0xBB, 0x88, 0x69, 0x5C, 0xFA, 0xC9, 0xC7, 0x40,
+	}
+	usmtUUID = [16]byte{
+		0x55, 0x53, 0x4D, 0x54, 0x21, 0xD2, 0x4F, 0xCE,
+		0xBB, 0x88, 0x69, 0x5C, 0xFA, 0xC9, 0xC7, 0x40,
+	}
+)
 
 // Known ftyp brands for MP4/MOV.
 var (
@@ -61,10 +75,11 @@ func (d *videoDecoderMP4) decode() error {
 		case "meta":
 			d.decodeMeta(startPos, boxSize)
 		case "mdat":
-			// Record mdat position/size for MediaDataOffset/MediaDataSize tags.
-			d.mdatOffset = startPos
-			// Box size includes 8-byte header; payload is the rest.
-			d.mdatSize = boxSize - 8
+			// Record mdat payload position/size for MediaDataOffset/MediaDataSize tags.
+			// Exiftool reports the data start offset and data size (excluding header).
+			// The current read position is just past the box header, so it's the data start.
+			d.mdatOffset = d.pos()
+			d.mdatSize = boxSize - uint64(d.pos()-startPos)
 		case "free", "skip", "wide":
 			// Skip padding boxes.
 		default:
@@ -194,6 +209,8 @@ func (d *videoDecoderMP4) decodeMoov(moovStart int64, moovSize uint64) error {
 			d.decodeUdta(startPos, boxSize)
 		case "meta":
 			d.decodeMeta(startPos, boxSize)
+		case "uuid":
+			d.decodeUUID(startPos, boxSize)
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
@@ -279,6 +296,12 @@ func (d *videoDecoderMP4) decodeTrak(trakStart int64, trakSize uint64) {
 			d.decodeTapt(startPos, boxSize)
 		case "mdia":
 			d.decodeMdia(startPos, boxSize)
+		case "tref":
+			d.decodeTref(startPos, boxSize)
+		case "uuid":
+			d.decodeUUID(startPos, boxSize)
+		case "meta":
+			d.decodeMeta(startPos, boxSize)
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
@@ -522,6 +545,8 @@ func (d *videoDecoderMP4) decodeMinf(minfStart int64, minfSize uint64) {
 			d.decodeHdlr(startPos, boxSize)
 		case "stbl":
 			d.decodeStbl(startPos, boxSize)
+		case "gmhd":
+			d.decodeGmhd(startPos, boxSize)
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
@@ -579,17 +604,27 @@ func (d *videoDecoderMP4) decodeStts() {
 	_ = d.readBytes(4) // version + flags
 	entryCount := d.read4()
 
-	if entryCount == 0 || d.mediaTimescale == 0 {
+	if entryCount == 0 || d.mediaTimescale == 0 || d.currentHandlerType != "vide" {
 		return
 	}
 
-	// Read first entry.
-	_ = d.read4()            // sample_count
-	sampleDelta := d.read4() // sample_delta
+	if entryCount > 10000 {
+		return // Sanity check.
+	}
 
-	// Only emit frame rate for constant-rate video (single entry with non-zero delta).
-	if entryCount == 1 && sampleDelta > 0 {
-		frameRate := float64(d.mediaTimescale) / float64(sampleDelta)
+	// Read all entries to compute weighted average frame rate.
+	var totalSamples uint64
+	var totalDuration uint64
+	for i := uint32(0); i < entryCount; i++ {
+		sampleCount := d.read4()
+		sampleDelta := d.read4()
+		totalSamples += uint64(sampleCount)
+		totalDuration += uint64(sampleCount) * uint64(sampleDelta)
+	}
+
+	if totalSamples > 0 && totalDuration > 0 {
+		avgDelta := float64(totalDuration) / float64(totalSamples)
+		frameRate := float64(d.mediaTimescale) / avgDelta
 		if d.opts.Sources.Has(QUICKTIME) {
 			d.emitQuickTimeTag("VideoFrameRate", frameRate)
 		}
@@ -639,7 +674,10 @@ func (d *videoDecoderMP4) decodeStsd(stsdStart int64, stsdSize uint64) {
 		}
 		d.decodeVisualSampleEntry(entryStart, entrySize)
 	default:
-		// Other handler types (e.g., metadata tracks) — skip.
+		// Metadata tracks and other handler types — emit MetaFormat (codec fourCC).
+		if d.opts.Sources.Has(QUICKTIME) {
+			d.emitQuickTimeTag("MetaFormat", codec.String())
+		}
 	}
 }
 
@@ -708,23 +746,69 @@ func (d *videoDecoderMP4) decodeVisualSampleEntry(entryStart int64, entrySize ui
 }
 
 // decodeAudioSampleEntry parses the audio sample entry fields (ISO 14496-12 §12.2.3).
+// Handles QuickTime V0 and V1 audio sample entries.
 // Emits AudioChannels, AudioBitsPerSample, and AudioSampleRate.
 func (d *videoDecoderMP4) decodeAudioSampleEntry(entryStart int64, entrySize uint32) {
-	_ = d.readBytes(8) // reserved
+	// QuickTime audio sample entry: version(2)+revision(2)+vendor(4) = 8 bytes.
+	version := d.read2()
+	_ = d.read2() // revision
+	_ = d.read4() // vendor
 
 	channelCount := d.read2()
 	sampleSize := d.read2()
-	_ = d.read2() // pre_defined (compression_id)
-	_ = d.read2() // reserved (packet_size)
+	_ = d.read2() // compression_id
+	_ = d.read2() // packet_size
 
 	// Sample rate is 16.16 fixed point.
 	sampleRateFixed := d.read4()
 	sampleRate := int(sampleRateFixed >> 16)
 
+	// V1 has 4 extra uint32 fields after the standard ones.
+	if version == 1 {
+		_ = d.read4() // samplesPerPacket
+		_ = d.read4() // bytesPerPacket
+		_ = d.read4() // bytesPerFrame
+		_ = d.read4() // bytesPerSample
+	}
+
 	if d.opts.Sources.Has(QUICKTIME) {
 		d.emitQuickTimeTag("AudioChannels", int(channelCount))
 		d.emitQuickTimeTag("AudioBitsPerSample", int(sampleSize))
 		d.emitQuickTimeTag("AudioSampleRate", sampleRate)
+	}
+
+	// Parse sub-boxes (wave, esds, etc.) within the audio sample entry.
+	entryEnd := entryStart + int64(entrySize)
+	for d.pos()+8 <= entryEnd {
+		subStart := d.pos()
+		subSize, subType, isEOF := d.readBoxHeader()
+		if isEOF || subSize < 8 {
+			break
+		}
+		if subType.String() == "wave" {
+			d.decodeWave(subStart, subSize)
+		}
+		d.seekToBoxEnd(subStart, subSize)
+	}
+}
+
+// decodeWave parses the wave (sound data format) box inside audio sample entries.
+// Extracts PurchaseFileFormat from the frma (original format) sub-box.
+func (d *videoDecoderMP4) decodeWave(waveStart int64, waveSize uint64) {
+	waveEnd := waveStart + int64(waveSize)
+	for d.pos()+8 <= waveEnd {
+		subStart := d.pos()
+		subSize, subType, isEOF := d.readBoxHeader()
+		if isEOF || subSize < 8 {
+			break
+		}
+		if subType.String() == "frma" && subSize >= 12 {
+			format := d.readFourCC()
+			if d.opts.Sources.Has(QUICKTIME) {
+				d.emitQuickTimeTag("PurchaseFileFormat", format.String())
+			}
+		}
+		d.seekToBoxEnd(subStart, subSize)
 	}
 }
 
@@ -750,6 +834,8 @@ func (d *videoDecoderMP4) decodeBtrt() {
 }
 
 // decodeUdta iterates the user data box.
+// Handles meta containers, old-style QuickTime text atoms (©xxx), XMP_ boxes,
+// Pentax TAGS atoms, and UUID boxes.
 func (d *videoDecoderMP4) decodeUdta(udtaStart int64, udtaSize uint64) {
 	udtaEnd := udtaStart + int64(udtaSize)
 	for d.pos() < udtaEnd {
@@ -759,8 +845,48 @@ func (d *videoDecoderMP4) decodeUdta(udtaStart int64, udtaSize uint64) {
 			break
 		}
 
-		if boxType.String() == "meta" {
+		boxTypeStr := boxType.String()
+		switch {
+		case boxTypeStr == "meta":
 			d.decodeMeta(startPos, boxSize)
+		case boxTypeStr == "XMP_":
+			// Raw XMP data directly in udta (common in QuickTime MOV files).
+			if d.opts.Sources.Has(XMP) {
+				dataLen := int(boxSize) - 8
+				if dataLen > 0 {
+					rc := d.bufferedReader(dataLen)
+					_ = d.decodeXMP(rc)
+					_ = rc.Close()
+				}
+			}
+		case boxTypeStr == "TAGS":
+			// Pentax manufacturer-specific binary metadata.
+			if d.opts.Sources.Has(MAKERNOTES) {
+				dataLen := int(boxSize) - 8
+				if dataLen > 0 && dataLen < 1024*1024 {
+					data := d.readBytes(dataLen)
+					d.decodePentaxTAGS(data)
+				}
+			}
+		case boxTypeStr == "uuid":
+			d.decodeUUID(startPos, boxSize)
+		case len(boxTypeStr) > 0 && boxTypeStr[0] == '\xa9':
+			// Old-style QuickTime text atom: 2-byte text_size, 2-byte language, then text.
+			// These appear in udta with types like ©fmt, ©inf, etc.
+			if d.opts.Sources.Has(QUICKTIME) {
+				dataLen := int(boxSize) - 8
+				if dataLen >= 4 {
+					textSize := int(d.read2())
+					_ = d.read2() // language code
+					if textSize > 0 && textSize <= dataLen-4 {
+						text := printableString(string(d.readBytes(textSize)))
+						tagName := ilstAtomToTagName(boxTypeStr)
+						if tagName != "" {
+							d.emitQuickTimeTag(tagName, text)
+						}
+					}
+				}
+			}
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
@@ -812,6 +938,31 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
 					d.decodeIlstMdta(startPos, boxSize, keysTable)
 				} else {
 					d.decodeIlst(startPos, boxSize)
+				}
+			}
+		case "idat":
+			// Sony NRTM: XML may be embedded in idat within the meta box.
+			if handlerType == "nrtm" && d.opts.Sources.Has(XML) {
+				dataLen := int(boxSize) - 8
+				if dataLen > 0 && dataLen < 1024*1024 {
+					data := d.readBytes(dataLen)
+					xmlData := scanForXMLInMeta(data)
+					if xmlData != nil {
+						d.decodeSonyNRTM(bytes.NewReader(xmlData))
+					}
+				}
+			}
+		case "xml ":
+			// XML sub-box (FullBox): version+flags(4) + XML data.
+			if handlerType == "nrtm" && d.opts.Sources.Has(XML) {
+				_ = d.readBytes(4) // version + flags
+				dataLen := int(boxSize) - 12
+				if dataLen > 0 && dataLen < 1024*1024 {
+					data := d.readBytes(dataLen)
+					xmlData := scanForXMLInMeta(data)
+					if xmlData != nil {
+						d.decodeSonyNRTM(bytes.NewReader(xmlData))
+					}
 				}
 			}
 		}
@@ -945,10 +1096,16 @@ func (d *videoDecoderMP4) decodeUUID(startPos int64, boxSize uint64) {
 			}
 			d.decodeEXIF(rc)
 		}
-	default:
-		if d.opts.Warnf != nil {
-			d.opts.Warnf("decode uuid: unknown UUID box")
+	case profUUID:
+		if d.opts.Sources.Has(QUICKTIME) {
+			d.decodePROFUUID(dataLen)
 		}
+	case usmtUUID:
+		if d.opts.Sources.Has(QUICKTIME) {
+			d.decodeUSMTUUID(dataLen)
+		}
+	default:
+		// Unknown UUID — silently skip.
 	}
 }
 
@@ -1045,4 +1202,222 @@ func isASCIIFourCC(fcc fourCC) bool {
 		}
 	}
 	return true
+}
+
+// decodePROFUUID parses the Sony XAVC UUID-PROF box containing file, video,
+// and audio profile sub-boxes (FPRF, VPRF, APRF).
+func (d *videoDecoderMP4) decodePROFUUID(dataLen int64) {
+	endPos := d.pos() + dataLen
+	_ = d.read4() // version
+	_ = d.read4() // profile count
+
+	for d.pos()+8 <= endPos {
+		subStart := d.pos()
+		subSize, subType, isEOF := d.readBoxHeader()
+		if isEOF || subSize < 8 {
+			break
+		}
+
+		switch subType.String() {
+		case "FPRF":
+			d.decodeFPRF()
+		case "VPRF":
+			d.decodeVPRF()
+		case "APRF":
+			d.decodeAPRF()
+		}
+
+		d.seekToBoxEnd(subStart, subSize)
+	}
+}
+
+// decodeFPRF parses the file profile sub-box of UUID-PROF.
+func (d *videoDecoderMP4) decodeFPRF() {
+	_ = d.read4() // version
+	flags := d.read4()
+	_ = d.read4() // reserved
+	d.emitQuickTimeTag("FileFunctionFlags", flags)
+}
+
+// decodeVPRF parses the video profile sub-box of UUID-PROF.
+// Layout: version(4) + trackID(4) + codec(4) + unknown(4) + attributes(4) +
+// avgBitrate(4) + maxBitrate(4) + avgFrameRate(4) + maxFrameRate(4) +
+// size(2+2) + pixelAspect(2+2).
+func (d *videoDecoderMP4) decodeVPRF() {
+	_ = d.read4() // version
+	trackID := d.read4()
+	codec := d.readFourCC()
+	_ = d.read4() // codec info (unknown)
+	attributes := d.read4()
+	avgBitrate := d.read4()
+	maxBitrate := d.read4()
+	avgFrameRateFixed := d.read4()
+	maxFrameRateFixed := d.read4()
+
+	// VideoSize: 2 × uint16 packed in 4 bytes.
+	w := d.read2()
+	h := d.read2()
+	// PixelAspectRatio: 2 × uint16.
+	parH := d.read2()
+	parV := d.read2()
+
+	d.emitQuickTimeTag("VideoTrackID", trackID)
+	d.emitQuickTimeTag("VideoCodec", codec.String())
+	d.emitQuickTimeTag("VideoAttributes", attributes)
+	// Bitrates are stored in kbps; exiftool multiplies by 1000 for bps.
+	d.emitQuickTimeTag("VideoAvgBitrate", int(avgBitrate)*1000)
+	d.emitQuickTimeTag("VideoMaxBitrate", int(maxBitrate)*1000)
+	// Frame rates are fixed-point 16.16.
+	d.emitQuickTimeTag("VideoAvgFrameRate", float64(avgFrameRateFixed)/65536.0)
+	d.emitQuickTimeTag("VideoMaxFrameRate", float64(maxFrameRateFixed)/65536.0)
+	d.emitQuickTimeTag("VideoSize", fmt.Sprintf("%d %d", w, h))
+	d.emitQuickTimeTag("PixelAspectRatio", fmt.Sprintf("%d %d", parH, parV))
+}
+
+// decodeAPRF parses the audio profile sub-box of UUID-PROF.
+func (d *videoDecoderMP4) decodeAPRF() {
+	_ = d.read4() // version
+	trackID := d.read4()
+	codec := d.readFourCC()
+	_ = d.read4() // codec info (unknown)
+	attributes := d.read4()
+	avgBitrate := d.read4()
+	maxBitrate := d.read4()
+	sampleRate := d.read4()
+	channels := d.read4()
+
+	d.emitQuickTimeTag("AudioTrackID", trackID)
+	d.emitQuickTimeTag("AudioCodec", codec.String())
+	d.emitQuickTimeTag("AudioAttributes", attributes)
+	d.emitQuickTimeTag("AudioAvgBitrate", int(avgBitrate)*1000)
+	d.emitQuickTimeTag("AudioMaxBitrate", int(maxBitrate)*1000)
+	d.emitQuickTimeTag("AudioSampleRate", sampleRate)
+	d.emitQuickTimeTag("AudioChannels", channels)
+}
+
+// decodeUSMTUUID parses the Sony UUID-USMT box containing MTDT metadata entries.
+func (d *videoDecoderMP4) decodeUSMTUUID(dataLen int64) {
+	endPos := d.pos() + dataLen
+	for d.pos()+8 <= endPos {
+		subStart := d.pos()
+		subSize, subType, isEOF := d.readBoxHeader()
+		if isEOF || subSize < 8 {
+			break
+		}
+		if subType.String() == "MTDT" {
+			d.decodeMTDT(int(subSize) - 8)
+		}
+		d.seekToBoxEnd(subStart, subSize)
+	}
+}
+
+// decodeMTDT parses a Sony MTDT (MetaData) box.
+// Format: entry_count(2), per entry: data_size(2) + data_type(4) + language(2) + encoding(2) + data(N).
+func (d *videoDecoderMP4) decodeMTDT(payloadLen int) {
+	if payloadLen < 2 {
+		return
+	}
+	entryCount := d.read2()
+	for i := 0; i < int(entryCount); i++ {
+		dataSize := d.read2()
+		if dataSize < 10 {
+			break
+		}
+		dataType := d.read4()
+		_ = d.read2() // language
+		_ = d.read2() // encoding (1=UTF-16BE, 0=binary)
+
+		valueLen := int(dataSize) - 10
+		if valueLen <= 0 {
+			continue
+		}
+
+		switch dataType {
+		case 0x000a:
+			// TrackProperty: 8 bytes — uint32 + uint16 + uint16 (space-separated).
+			if valueLen >= 8 {
+				propData := d.readBytes(8)
+				d.emitQuickTimeTag("TrackProperty", fmt.Sprintf("%d %d %d",
+					binary.BigEndian.Uint32(propData[0:4]),
+					binary.BigEndian.Uint16(propData[4:6]),
+					binary.BigEndian.Uint16(propData[6:8])))
+				if valueLen > 8 {
+					d.skip(int64(valueLen - 8))
+				}
+			} else {
+				d.skip(int64(valueLen))
+			}
+		case 0x000b:
+			// TimeZone: 2-byte signed integer (minutes offset from UTC).
+			if valueLen >= 2 {
+				tz := int16(d.read2())
+				d.emitQuickTimeTag("TimeZone", int(tz))
+				if valueLen > 2 {
+					d.skip(int64(valueLen - 2))
+				}
+			} else {
+				d.skip(int64(valueLen))
+			}
+		default:
+			d.skip(int64(valueLen))
+		}
+	}
+}
+
+// decodeTref iterates the track reference box, handling cdsc (content describes).
+func (d *videoDecoderMP4) decodeTref(trefStart int64, trefSize uint64) {
+	trefEnd := trefStart + int64(trefSize)
+	for d.pos() < trefEnd {
+		subStart := d.pos()
+		subSize, subType, isEOF := d.readBoxHeader()
+		if isEOF || subSize < 8 {
+			break
+		}
+		if subType.String() == "cdsc" {
+			// cdsc contains one or more track IDs that this track describes.
+			if subSize >= 12 {
+				trackID := d.read4()
+				if d.opts.Sources.Has(QUICKTIME) {
+					d.emitQuickTimeTag("ContentDescribes", trackID)
+				}
+			}
+		}
+		d.seekToBoxEnd(subStart, subSize)
+	}
+}
+
+// decodeGmhd parses the generic media header container (QuickTime-specific).
+func (d *videoDecoderMP4) decodeGmhd(gmhdStart int64, gmhdSize uint64) {
+	gmhdEnd := gmhdStart + int64(gmhdSize)
+	for d.pos() < gmhdEnd {
+		subStart := d.pos()
+		subSize, subType, isEOF := d.readBoxHeader()
+		if isEOF || subSize < 8 {
+			break
+		}
+		if subType.String() == "gmin" {
+			d.decodeGmin()
+		}
+		d.seekToBoxEnd(subStart, subSize)
+	}
+}
+
+// decodeGmin parses the generic media information header (gmin) box.
+func (d *videoDecoderMP4) decodeGmin() {
+	version := d.read1()
+	flags := d.readBytes(3)
+	graphicsMode := d.read2()
+	r := d.read2()
+	g := d.read2()
+	b := d.read2()
+	balance := d.read2()
+	_ = d.read2() // reserved
+
+	if d.opts.Sources.Has(QUICKTIME) {
+		d.emitQuickTimeTag("GenMediaVersion", int(version))
+		d.emitQuickTimeTag("GenFlags", fmt.Sprintf("%d %d %d", flags[0], flags[1], flags[2]))
+		d.emitQuickTimeTag("GenGraphicsMode", int(graphicsMode))
+		d.emitQuickTimeTag("GenOpColor", fmt.Sprintf("%d %d %d", r, g, b))
+		d.emitQuickTimeTag("GenBalance", fixedPoint88ToFloat(balance))
+	}
 }
