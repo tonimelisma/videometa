@@ -7,6 +7,7 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
+// Validates: REQ-EXIF-05
 func TestRatUint32(t *testing.T) {
 	c := qt.New(t)
 
@@ -18,6 +19,7 @@ func TestRatUint32(t *testing.T) {
 	c.Assert(r.String(), qt.Equals, "3/2")
 }
 
+// Validates: REQ-EXIF-05
 func TestRatInt32(t *testing.T) {
 	c := qt.New(t)
 
@@ -28,6 +30,7 @@ func TestRatInt32(t *testing.T) {
 	c.Assert(r.Float64(), qt.Equals, -1.5)
 }
 
+// Validates: REQ-EXIF-05
 func TestRatDenOne(t *testing.T) {
 	c := qt.New(t)
 
@@ -36,6 +39,7 @@ func TestRatDenOne(t *testing.T) {
 	c.Assert(r.String(), qt.Equals, "42")
 }
 
+// Validates: REQ-NF-06
 func TestRatZeroDen(t *testing.T) {
 	c := qt.New(t)
 
@@ -43,6 +47,7 @@ func TestRatZeroDen(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 }
 
+// Validates: REQ-EXIF-05
 func TestRatMarshalText(t *testing.T) {
 	c := qt.New(t)
 
@@ -128,6 +133,7 @@ func TestParseISO6709(t *testing.T) {
 	}
 }
 
+// Validates: REQ-EXIF-05
 func TestConvertAPEXToFNumber(t *testing.T) {
 	c := qt.New(t)
 	// APEX 5.0 should give f/5.657 (2^(5/2) ≈ 5.657)
@@ -135,6 +141,7 @@ func TestConvertAPEXToFNumber(t *testing.T) {
 	c.Assert(math.Abs(f-5.6568) < 0.001, qt.IsTrue)
 }
 
+// Validates: REQ-EXIF-05
 func TestConvertAPEXToSeconds(t *testing.T) {
 	c := qt.New(t)
 	// APEX 6.0 should give 1/64 seconds (2^-6 ≈ 0.015625)
@@ -142,6 +149,7 @@ func TestConvertAPEXToSeconds(t *testing.T) {
 	c.Assert(math.Abs(s-0.015625) < 0.0001, qt.IsTrue)
 }
 
+// Validates: REQ-EXIF-05
 func TestConvertDegreesToDecimal(t *testing.T) {
 	c := qt.New(t)
 	// 34°3'33" = 34.059166...
@@ -149,12 +157,14 @@ func TestConvertDegreesToDecimal(t *testing.T) {
 	c.Assert(math.Abs(d-34.059166) < 0.001, qt.IsTrue)
 }
 
+// Validates: REQ-NF-06
 func TestPrintableString(t *testing.T) {
 	c := qt.New(t)
 	c.Assert(printableString("hello\x00\x01world"), qt.Equals, "helloworld")
 	c.Assert(printableString("  clean  "), qt.Equals, "clean")
 }
 
+// Validates: REQ-NF-06
 func TestTrimNulls(t *testing.T) {
 	c := qt.New(t)
 	c.Assert(trimNulls([]byte("hello\x00\x00")), qt.DeepEquals, []byte("hello"))

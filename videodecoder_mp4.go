@@ -16,8 +16,9 @@ var (
 		"iso5": true, "iso6": true, "mp41": true, "mp42": true,
 		"avc1": true, "hvc1": true, "hev1": true, "av01": true,
 		"M4V ": true, "M4A ": true, "f4v ": true, "mmp4": true,
-		"MSNV": true, "dash": true, "3gp4": true, "3gp5": true,
-		"3gp6": true, "3gp7": true,
+		"MSNV": true, "dash": true, "XAVC": true,
+		"3gp4": true, "3gp5": true, "3gp6": true, "3gp7": true,
+		"nras": true,
 	}
 	movBrands = map[string]bool{
 		"qt  ": true,
@@ -27,10 +28,12 @@ var (
 // videoDecoderMP4 handles MP4/MOV container parsing and metadata routing.
 type videoDecoderMP4 struct {
 	*baseDecoder
-	isMOV          bool   // True if ftyp brand indicates QuickTime MOV.
-	mediaTimescale uint32 // From mdhd, used for stts frame rate calculation.
-	mdatOffset     int64  // Start offset of mdat box (0 if not seen).
-	mdatSize       uint64 // Size of mdat box payload.
+	isMOV              bool   // True if ftyp brand indicates QuickTime MOV.
+	movieTimescale     uint32 // From mvhd, used for tkhd TrackDuration conversion.
+	mediaTimescale     uint32 // From mdhd, used for stts frame rate calculation.
+	currentHandlerType string // Handler type of current track ("vide", "soun", etc.). Reset per track.
+	mdatOffset         int64  // Start offset of mdat box (0 if not seen).
+	mdatSize           uint64 // Size of mdat box payload.
 }
 
 func (d *videoDecoderMP4) decode() error {
@@ -135,7 +138,28 @@ func (d *videoDecoderMP4) decodeFtyp(startPos int64, boxSize uint64) error {
 		compatBrands = append(compatBrands, compat.String())
 	}
 
-	// Emit ftyp tags before validation so they're available even for edge cases.
+	// Validate brand before emitting tags — invalid files should not produce callbacks.
+	if movBrands[brandStr] {
+		d.isMOV = true
+	} else if !mp4Brands[brandStr] {
+		found := false
+		for _, cb := range compatBrands {
+			if movBrands[cb] {
+				d.isMOV = true
+				found = true
+				break
+			}
+			if mp4Brands[cb] {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return newInvalidFormatErrorf("unrecognized ftyp brand: %q", brandStr)
+		}
+	}
+
+	// Emit ftyp tags after validation succeeds.
 	if d.opts.Sources.Has(QUICKTIME) {
 		d.emitQuickTimeTag("MajorBrand", brandStr)
 		// MinorVersion: exiftool formats as val/65536 . (val/256)%256 . val%256.
@@ -146,25 +170,7 @@ func (d *videoDecoderMP4) decodeFtyp(startPos int64, boxSize uint64) error {
 		}
 	}
 
-	// Validate brand.
-	if movBrands[brandStr] {
-		d.isMOV = true
-		return nil
-	}
-	if mp4Brands[brandStr] {
-		return nil
-	}
-	for _, cb := range compatBrands {
-		if movBrands[cb] {
-			d.isMOV = true
-			return nil
-		}
-		if mp4Brands[cb] {
-			return nil
-		}
-	}
-
-	return newInvalidFormatErrorf("unrecognized ftyp brand: %q", brandStr)
+	return nil
 }
 
 // decodeMoov iterates the moov container's child boxes.
@@ -214,6 +220,9 @@ func (d *videoDecoderMP4) decodeMvhd() {
 		duration = uint64(d.read4())
 	}
 
+	// Store movie timescale for tkhd TrackDuration conversion.
+	d.movieTimescale = timescale
+
 	// Convert to time.Time and duration.
 	if timescale > 0 {
 		d.result.VideoConfig.Duration = time.Duration(duration) * time.Second / time.Duration(timescale)
@@ -250,6 +259,9 @@ func (d *videoDecoderMP4) decodeMvhd() {
 
 // decodeTrak iterates a track box's children.
 func (d *videoDecoderMP4) decodeTrak(trakStart int64, trakSize uint64) {
+	// Reset per-track state so audio/video detection starts fresh.
+	d.currentHandlerType = ""
+
 	trakEnd := trakStart + int64(trakSize)
 	for d.pos() < trakEnd {
 		startPos := d.pos()
@@ -327,11 +339,19 @@ func (d *videoDecoderMP4) decodeTkhd() {
 		d.emitQuickTimeTag("TrackCreateDate", quickTimeToTime(creationTime))
 		d.emitQuickTimeTag("TrackModifyDate", quickTimeToTime(modificationTime))
 		d.emitQuickTimeTag("TrackID", trackID)
-		d.emitQuickTimeTag("TrackDuration", durationSeconds(duration, 1000)) // tkhd duration is in movie timescale
+		// tkhd duration is in movie timescale units; fall back to 1000 if mvhd not yet seen.
+		trackTimescale := d.movieTimescale
+		if trackTimescale == 0 {
+			trackTimescale = 1000
+		}
+		d.emitQuickTimeTag("TrackDuration", durationSeconds(duration, trackTimescale))
 		d.emitQuickTimeTag("TrackLayer", layer)
 		d.emitQuickTimeTag("TrackVolume", fixedPoint88ToFloat(volume))
-		d.emitQuickTimeTag("ImageWidth", width)
-		d.emitQuickTimeTag("ImageHeight", height)
+		// Only emit ImageWidth/ImageHeight for video tracks (audio tracks have zero dimensions).
+		if width > 0 {
+			d.emitQuickTimeTag("ImageWidth", width)
+			d.emitQuickTimeTag("ImageHeight", height)
+		}
 		d.emitQuickTimeTag("MatrixStructure", formatMatrix(matrix))
 	}
 }
@@ -406,6 +426,14 @@ func (d *videoDecoderMP4) decodeHdlr(hdlrStart int64, hdlrSize uint64) {
 	handlerClass := d.readFourCC()
 	handlerType := d.readFourCC()
 
+	// Track handler type for stsd branching. Only set from media handler types
+	// (mdia hdlr), not from data handler references (minf hdlr has "alis" etc.).
+	// Data handlers have well-known types like "alis", "url ", "rsrc".
+	ht := handlerType.String()
+	if ht != "alis" && ht != "url " && ht != "rsrc" {
+		d.currentHandlerType = ht
+	}
+
 	// Read manufacturer/vendor (12 bytes = 3 x uint32 reserved).
 	_ = d.readBytes(12)
 
@@ -443,6 +471,11 @@ func (d *videoDecoderMP4) decodeMinf(minfStart int64, minfSize uint64) {
 		switch boxType.String() {
 		case "vmhd":
 			d.decodeVmhd()
+		case "smhd":
+			d.decodeSmhd()
+		case "hdlr":
+			// QuickTime minf contains a data handler reference hdlr (comp_type "dhlr").
+			d.decodeHdlr(startPos, boxSize)
 		case "stbl":
 			d.decodeStbl(startPos, boxSize)
 		}
@@ -462,6 +495,17 @@ func (d *videoDecoderMP4) decodeVmhd() {
 	if d.opts.Sources.Has(QUICKTIME) {
 		d.emitQuickTimeTag("GraphicsMode", graphicsMode)
 		d.emitQuickTimeTag("OpColor", fmt.Sprintf("%d %d %d", r, g, b))
+	}
+}
+
+// decodeSmhd parses the sound media header box.
+func (d *videoDecoderMP4) decodeSmhd() {
+	_ = d.readBytes(4) // version + flags
+	balance := d.read2()
+	_ = d.read2() // reserved
+
+	if d.opts.Sources.Has(QUICKTIME) {
+		d.emitQuickTimeTag("Balance", fixedPoint88ToFloat(balance))
 	}
 }
 
@@ -508,7 +552,8 @@ func (d *videoDecoderMP4) decodeStts() {
 	}
 }
 
-// decodeStsd parses the sample description box to extract codec and visual info.
+// decodeStsd parses the sample description box, branching on handler type
+// to parse either visual (video) or audio sample entries.
 func (d *videoDecoderMP4) decodeStsd(stsdStart int64, stsdSize uint64) {
 	_ = d.readBytes(4) // version + flags
 	entryCount := d.read4()
@@ -517,24 +562,45 @@ func (d *videoDecoderMP4) decodeStsd(stsdStart int64, stsdSize uint64) {
 		return
 	}
 
-	// Read first sample entry header.
+	// Read first sample entry common header.
 	entrySize := d.read4()
-	codec := d.readFourCC()    // codec fourCC (e.g., "avc1", "hvc1")
+	codec := d.readFourCC()    // codec fourCC (e.g., "avc1", "hvc1", "mp4a")
 	_ = d.readBytes(6)         // reserved
 	_ = d.read2()              // data reference index
 	entryStart := d.pos() - 16 // 4 (size) + 4 (type) + 6 (reserved) + 2 (data ref idx)
 
-	// Set codec in VideoConfig (first track only).
-	if d.result.VideoConfig.Codec == "" {
-		d.result.VideoConfig.Codec = codec.String()
+	switch d.currentHandlerType {
+	case "soun":
+		if d.opts.Sources.Has(QUICKTIME) {
+			d.emitQuickTimeTag("AudioFormat", codec.String())
+		}
+		d.decodeAudioSampleEntry(entryStart, entrySize)
+	case "vide":
+		// Set codec in VideoConfig (first video track only).
+		if d.result.VideoConfig.Codec == "" {
+			d.result.VideoConfig.Codec = codec.String()
+		}
+		if d.opts.Sources.Has(QUICKTIME) {
+			d.emitQuickTimeTag("CompressorID", codec.String())
+		}
+		d.decodeVisualSampleEntry(entryStart, entrySize)
+	case "":
+		// No handler seen yet — assume video for backwards compatibility with
+		// files where hdlr appears after stsd (non-standard but possible).
+		if d.result.VideoConfig.Codec == "" {
+			d.result.VideoConfig.Codec = codec.String()
+		}
+		if d.opts.Sources.Has(QUICKTIME) {
+			d.emitQuickTimeTag("CompressorID", codec.String())
+		}
+		d.decodeVisualSampleEntry(entryStart, entrySize)
+	default:
+		// Other handler types (e.g., metadata tracks) — skip.
 	}
+}
 
-	if d.opts.Sources.Has(QUICKTIME) {
-		d.emitQuickTimeTag("CompressorID", codec.String())
-	}
-
-	// Parse visual sample entry fields (ISO 14496-12 §12.1.3).
-	// This fixed structure follows the common sample entry header.
+// decodeVisualSampleEntry parses the visual sample entry fields (ISO 14496-12 §12.1.3).
+func (d *videoDecoderMP4) decodeVisualSampleEntry(entryStart int64, entrySize uint32) {
 	_ = d.readBytes(2)  // pre_defined
 	_ = d.readBytes(2)  // reserved
 	_ = d.readBytes(12) // pre_defined
@@ -569,6 +635,11 @@ func (d *videoDecoderMP4) decodeStsd(stsdStart int64, stsdSize uint64) {
 		d.emitQuickTimeTag("BitDepth", int(bitDepth))
 	}
 
+	// TODO: Parse VendorID from QuickTime visual sample entry extension
+	// (4 bytes after pre_defined, present in MOV but not ISO MP4).
+	// TODO: Parse clap/prod/encd sub-boxes for CleanApertureDimensions,
+	// ProductionApertureDimensions, EncodedPixelsDimensions.
+
 	// Parse sub-boxes within the sample entry (pasp, btrt, etc.).
 	entryEnd := entryStart + int64(entrySize)
 	for d.pos()+8 <= entryEnd {
@@ -586,6 +657,27 @@ func (d *videoDecoderMP4) decodeStsd(stsdStart int64, stsdSize uint64) {
 		}
 
 		d.seekToBoxEnd(subStart, subSize)
+	}
+}
+
+// decodeAudioSampleEntry parses the audio sample entry fields (ISO 14496-12 §12.2.3).
+// Emits AudioChannels, AudioBitsPerSample, and AudioSampleRate.
+func (d *videoDecoderMP4) decodeAudioSampleEntry(entryStart int64, entrySize uint32) {
+	_ = d.readBytes(8) // reserved
+
+	channelCount := d.read2()
+	sampleSize := d.read2()
+	_ = d.read2() // pre_defined (compression_id)
+	_ = d.read2() // reserved (packet_size)
+
+	// Sample rate is 16.16 fixed point.
+	sampleRateFixed := d.read4()
+	sampleRate := int(sampleRateFixed >> 16)
+
+	if d.opts.Sources.Has(QUICKTIME) {
+		d.emitQuickTimeTag("AudioChannels", int(channelCount))
+		d.emitQuickTimeTag("AudioBitsPerSample", int(sampleSize))
+		d.emitQuickTimeTag("AudioSampleRate", sampleRate)
 	}
 }
 
