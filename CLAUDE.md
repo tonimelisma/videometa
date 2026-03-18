@@ -4,7 +4,7 @@ Go package for reading metadata from video files. Companion to [bep/imagemeta](h
 
 ## Status
 
-**Implementation phase.** Core decoders complete (ISOBMFF, EXIF, XMP, IPTC, QuickTime). MakerNotes and extended test coverage pending.
+**v0.1.0.** All decoders complete: ISOBMFF, EXIF, XMP, IPTC, QuickTime native, Pentax MakerNotes, Sony XAVC (UUID-PROF, USMT/MTDT, NRTM XML), Apple MOV (mdta locales, wave/frma). Zero golden gaps across all test files.
 
 See `INIT.md` for project history. See `docs/` for requirements, architecture, and task plan. See `README.md` for usage.
 
@@ -18,7 +18,8 @@ See `INIT.md` for project history. See `docs/` for requirements, architecture, a
 | `metadecoder_xmp.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (XMP) |
 | `metadecoder_iptc*.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (IPTC) |
 | `metadecoder_quicktime*.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (QuickTime) |
-| `metadecoder_makernotes_*.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (EXIF-07..09) |
+| `metadecoder_makernotes_pentax.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (EXIF-07..09) |
+| `metadecoder_sony_nrtm.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (QuickTime) |
 | `io.go` | `docs/ARCHITECTURE.md` §5 (streamReader) | |
 | `helpers.go` | `docs/ARCHITECTURE.md` §6 (Error Handling) | |
 | `gen/`, `testdata/` | `docs/ARCHITECTURE.md` §7 (Testing) | `docs/REQUIREMENTS.md` §5 (Test Corpus) |

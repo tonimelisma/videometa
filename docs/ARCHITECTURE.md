@@ -19,6 +19,10 @@ io.ReadSeeker (or io.Reader fallback)
         → XMP decoder → HandleTag callback
         → IPTC decoder → HandleTag callback
         → QuickTime decoder → HandleTag callback
+        → MakerNotes decoder (Pentax TAGS) → HandleTag callback
+        → Sony NRTM XML decoder → HandleTag callback
+        → UUID-PROF decoder → HandleTag callback
+        → UUID-USMT/MTDT decoder → HandleTag callback
         → CONFIG extractor → DecodeResult.VideoConfig
 ```
 
@@ -36,11 +40,9 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-FILE-06 | `metadecoder_xmp.go` | XMP/RDF XML parser | REQ-XMP-* |
 | ARCH-FILE-07 | `metadecoder_iptc.go` | IPTC record parser | REQ-IPTC-* |
 | ARCH-FILE-08 | `metadecoder_iptc_fields.json` | IPTC field definitions (embedded) | REQ-IPTC-01 |
-| ARCH-FILE-09 | `metadecoder_quicktime.go` | QuickTime ilst/freeform parser, mvhd/tkhd | REQ-QT-* |
-| ARCH-FILE-10 | `metadecoder_quicktime_fields.go` | QuickTime tag name table | REQ-QT-07 |
-| ARCH-FILE-11 | `metadecoder_makernotes_apple.go` | Apple MakerNotes | REQ-EXIF-07 |
-| ARCH-FILE-12 | `metadecoder_makernotes_canon.go` | Canon MakerNotes | REQ-EXIF-08 |
-| ARCH-FILE-13 | `metadecoder_makernotes_sony.go` | Sony MakerNotes | REQ-EXIF-09 |
+| ARCH-FILE-09 | `metadecoder_quicktime.go` | QuickTime ilst/freeform parser, locale handling, tag name tables | REQ-QT-* |
+| ARCH-FILE-10 | `metadecoder_makernotes_pentax.go` | Pentax TAGS binary parser (MOV video MakerNotes) | REQ-EXIF-07 |
+| ARCH-FILE-11 | `metadecoder_sony_nrtm.go` | Sony NonRealTimeMeta XML parser (XAVC metadata) | REQ-QT-08 |
 | ARCH-FILE-14 | `helpers.go` | Rat[T], InvalidFormatError, value converters, ISO6709 parser | REQ-QT-06, REQ-NF-06 |
 | ARCH-FILE-15 | `gen/main.go` | Golden file generator (runs exiftool) | REQ-NF-04 |
 | ARCH-FILE-16 | `testdata/` | Test video files + golden JSON | REQ-TEST-* |
@@ -69,10 +71,19 @@ io.ReadSeeker (or io.Reader fallback)
 | `moov/udta/meta` | Parse as FullBox, descend |
 | `moov/udta/meta/ilst` | → QuickTime decoder |
 | `moov/udta/meta/ilst/----` | → QuickTime freeform decoder |
+| `moov/udta/XMP_` | → XMP decoder (raw XMP in udta) |
+| `moov/udta/TAGS` | → Pentax MakerNotes decoder |
+| `moov/udta/©xxx` | → QuickTime old-style text atom |
+| `moov/trak/tref/cdsc` | → ContentDescribes tag |
+| `moov/trak/mdia/minf/gmhd/gmin` | → Generic media header tags |
+| `moov/trak/meta` | → mdta keys/ilst (track-level metadata) |
+| `moov/meta (hdlr=nrtm)` | → Sony NRTM XML decoder (xml box) |
 | `uuid (XMP GUID)` | → XMP decoder |
-| `uuid (EXIF GUID)` or `moov/meta` item | → EXIF decoder |
+| `uuid (EXIF GUID)` | → EXIF decoder |
+| `uuid (PROF GUID)` | → Sony XAVC profile (FPRF/VPRF/APRF) |
+| `uuid (USMT GUID)` | → Sony MTDT (TrackProperty, TimeZone) |
 | `moof` | → Return "fragmented MP4 not supported" error |
-| Other | Skip (warn if potential metadata) |
+| Other | Skip silently |
 
 ---
 

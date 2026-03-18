@@ -171,3 +171,27 @@ func TestTrimNulls(t *testing.T) {
 	c.Assert(trimNulls([]byte("hello")), qt.DeepEquals, []byte("hello"))
 	c.Assert(trimNulls([]byte{0, 0}), qt.DeepEquals, []byte{})
 }
+
+func TestMatrixToRotation(t *testing.T) {
+	c := qt.New(t)
+
+	// Identity (0°).
+	c.Assert(matrixToRotation([9]int32{0x10000, 0, 0, 0, 0x10000, 0, 0, 0, 0x40000000}), qt.Equals, 0)
+	// 90° CW.
+	c.Assert(matrixToRotation([9]int32{0, 0x10000, 0, -0x10000, 0, 0, 0, 0, 0x40000000}), qt.Equals, 90)
+	// 180°.
+	c.Assert(matrixToRotation([9]int32{-0x10000, 0, 0, 0, -0x10000, 0, 0, 0, 0x40000000}), qt.Equals, 180)
+	// 270° CW.
+	c.Assert(matrixToRotation([9]int32{0, -0x10000, 0, 0x10000, 0, 0, 0, 0, 0x40000000}), qt.Equals, 270)
+	// Non-standard → 0.
+	c.Assert(matrixToRotation([9]int32{0, 0, 0, 0, 0, 0, 0, 0, 0}), qt.Equals, 0)
+}
+
+func TestCapitalizeFirst(t *testing.T) {
+	c := qt.New(t)
+
+	c.Assert(capitalizeFirst("hello"), qt.Equals, "Hello")
+	c.Assert(capitalizeFirst("Hello"), qt.Equals, "Hello")
+	c.Assert(capitalizeFirst(""), qt.Equals, "")
+	c.Assert(capitalizeFirst("a"), qt.Equals, "A")
+}
