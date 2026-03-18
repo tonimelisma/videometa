@@ -6,6 +6,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // XMP UUID used to locate XMP data in ISOBMFF containers.
@@ -29,6 +31,11 @@ func (d *videoDecoderMP4) decodeXMP(r io.Reader) error {
 		return nil // Non-fatal — partial failure.
 	}
 
+	// XMPToolkit is on the xmpmeta element itself (x:xmptk attribute).
+	if meta.XMPToolkit != "" {
+		d.emitXMPTag("XMPToolkit", "adobe:ns:meta/", meta.XMPToolkit)
+	}
+
 	for _, desc := range meta.RDF.Descriptions {
 		// Process attributes on the Description element.
 		for _, attr := range desc.Attrs {
@@ -38,7 +45,9 @@ func (d *videoDecoderMP4) decodeXMP(r io.Reader) error {
 			if attr.Value == "" {
 				continue
 			}
-			d.emitXMPTag(attr.Name.Local, attr.Name.Space, attr.Value)
+			// Exiftool capitalizes the first letter of XMP tag names.
+			tagName := capitalizeFirst(attr.Name.Local)
+			d.emitXMPTag(tagName, attr.Name.Space, attr.Value)
 		}
 
 		// Process list elements.
@@ -67,8 +76,9 @@ func (d *videoDecoderMP4) decodeXMP(r io.Reader) error {
 
 // XMP XML structures matching the RDF format.
 type xmpmeta struct {
-	XMLName xml.Name `xml:"xmpmeta"`
-	RDF     rdf      `xml:"RDF"`
+	XMLName    xml.Name `xml:"xmpmeta"`
+	XMPToolkit string   `xml:"xmptk,attr"`
+	RDF        rdf      `xml:"RDF"`
 }
 
 type rdf struct {
@@ -142,6 +152,19 @@ func (d *videoDecoderMP4) emitXMPList(name string, list interface{ items() []str
 func (s seqList) items() []string { return s.Items }
 func (s bagList) items() []string { return s.Items }
 func (s altList) items() []string { return s.Items }
+
+// capitalizeFirst returns s with its first rune uppercased.
+// Exiftool capitalizes the first letter of all XMP tag names.
+func capitalizeFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	r, size := utf8.DecodeRuneInString(s)
+	if unicode.IsUpper(r) {
+		return s
+	}
+	return string(unicode.ToUpper(r)) + s[size:]
+}
 
 // parseXMPGPSCoordinate parses an XMP GPS coordinate like "26,34.951N" to decimal degrees.
 func parseXMPGPSCoordinate(s string) (float64, error) {

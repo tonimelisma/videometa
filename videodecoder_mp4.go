@@ -587,8 +587,8 @@ func (d *videoDecoderMP4) decodeStts() {
 	_ = d.read4()            // sample_count
 	sampleDelta := d.read4() // sample_delta
 
-	// Only emit frame rate for constant-rate video (single entry with non-zero delta).
-	if entryCount == 1 && sampleDelta > 0 {
+	// Only emit frame rate for constant-rate video tracks (not audio/metadata).
+	if d.currentHandlerType == "vide" && entryCount == 1 && sampleDelta > 0 {
 		frameRate := float64(d.mediaTimescale) / float64(sampleDelta)
 		if d.opts.Sources.Has(QUICKTIME) {
 			d.emitQuickTimeTag("VideoFrameRate", frameRate)
@@ -750,6 +750,8 @@ func (d *videoDecoderMP4) decodeBtrt() {
 }
 
 // decodeUdta iterates the user data box.
+// Handles meta containers, old-style QuickTime text atoms (©xxx), XMP_ boxes,
+// Pentax TAGS atoms, and UUID boxes.
 func (d *videoDecoderMP4) decodeUdta(udtaStart int64, udtaSize uint64) {
 	udtaEnd := udtaStart + int64(udtaSize)
 	for d.pos() < udtaEnd {
@@ -759,8 +761,48 @@ func (d *videoDecoderMP4) decodeUdta(udtaStart int64, udtaSize uint64) {
 			break
 		}
 
-		if boxType.String() == "meta" {
+		boxTypeStr := boxType.String()
+		switch {
+		case boxTypeStr == "meta":
 			d.decodeMeta(startPos, boxSize)
+		case boxTypeStr == "XMP_":
+			// Raw XMP data directly in udta (common in QuickTime MOV files).
+			if d.opts.Sources.Has(XMP) {
+				dataLen := int(boxSize) - 8
+				if dataLen > 0 {
+					rc := d.bufferedReader(dataLen)
+					_ = d.decodeXMP(rc)
+					_ = rc.Close()
+				}
+			}
+		case boxTypeStr == "TAGS":
+			// Pentax manufacturer-specific binary metadata.
+			if d.opts.Sources.Has(MAKERNOTES) {
+				dataLen := int(boxSize) - 8
+				if dataLen > 0 && dataLen < 1024*1024 {
+					data := d.readBytes(dataLen)
+					d.decodePentaxTAGS(data)
+				}
+			}
+		case boxTypeStr == "uuid":
+			d.decodeUUID(startPos, boxSize)
+		case len(boxTypeStr) > 0 && boxTypeStr[0] == '\xa9':
+			// Old-style QuickTime text atom: 2-byte text_size, 2-byte language, then text.
+			// These appear in udta with types like ©fmt, ©inf, etc.
+			if d.opts.Sources.Has(QUICKTIME) {
+				dataLen := int(boxSize) - 8
+				if dataLen >= 4 {
+					textSize := int(d.read2())
+					_ = d.read2() // language code
+					if textSize > 0 && textSize <= dataLen-4 {
+						text := printableString(string(d.readBytes(textSize)))
+						tagName := ilstAtomToTagName(boxTypeStr)
+						if tagName != "" {
+							d.emitQuickTimeTag(tagName, text)
+						}
+					}
+				}
+			}
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
