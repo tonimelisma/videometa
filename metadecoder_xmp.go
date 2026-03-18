@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"math"
 	"strconv"
 	"strings"
 )
@@ -117,23 +116,14 @@ func isXMPMetaNamespace(ns string) bool {
 	return false
 }
 
-// emitXMPTag sends an XMP source tag to the callback.
+// emitXMPTag sends an XMP source tag via the centralized emitTag.
 func (d *videoDecoderMP4) emitXMPTag(name, namespace string, value any) {
-	if d.opts.HandleTag == nil {
-		return
-	}
-	ti := TagInfo{
+	d.emitTag(TagInfo{
 		Source:    XMP,
 		Tag:       name,
 		Namespace: namespace,
 		Value:     value,
-	}
-	if d.opts.ShouldHandleTag != nil && !d.opts.ShouldHandleTag(ti) {
-		return
-	}
-	if err := d.opts.HandleTag(ti); err != nil {
-		panic(err)
-	}
+	})
 }
 
 // emitXMPList emits list values — single string for 1 item, []string for multiple.
@@ -207,6 +197,3 @@ func parseXMPGPSCoordinate(s string) (float64, error) {
 		return 0, fmt.Errorf("unrecognized GPS format: %q", s)
 	}
 }
-
-// Suppress unused import warning.
-var _ = math.NaN

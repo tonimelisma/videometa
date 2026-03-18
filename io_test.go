@@ -45,7 +45,7 @@ func TestStreamReaderRead2LittleEndian(t *testing.T) {
 func TestStreamReaderRead4(t *testing.T) {
 	c := qt.New(t)
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, uint32(123456))
+	_ = binary.Write(&buf, binary.BigEndian, uint32(123456))
 	sr := newStreamReader(bytes.NewReader(buf.Bytes()))
 
 	c.Assert(sr.read4(), qt.Equals, uint32(123456))
@@ -55,7 +55,7 @@ func TestStreamReaderRead4(t *testing.T) {
 func TestStreamReaderRead8(t *testing.T) {
 	c := qt.New(t)
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, uint64(0xDEADBEEFCAFEBABE))
+	_ = binary.Write(&buf, binary.BigEndian, uint64(0xDEADBEEFCAFEBABE))
 	sr := newStreamReader(bytes.NewReader(buf.Bytes()))
 
 	c.Assert(sr.read8(), qt.Equals, uint64(0xDEADBEEFCAFEBABE))
@@ -154,7 +154,7 @@ func TestStreamReaderBufferedReader(t *testing.T) {
 
 	// Read first 4 bytes into a buffered reader.
 	rc := sr.bufferedReader(4)
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	buf := make([]byte, 4)
 	_, err := io.ReadFull(rc, buf)

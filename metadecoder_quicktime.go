@@ -2,34 +2,32 @@ package videometa
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"strings"
-	"time"
 )
 
 // iTunes/QuickTime data type indicators (well-known types).
 const (
-	qtDataTypeUTF8       = 1
-	qtDataTypeUTF16BE    = 2
-	qtDataTypeSJIS       = 3
-	qtDataTypeHTML       = 6
-	qtDataTypeXML        = 7
-	qtDataTypeUUID       = 8
-	qtDataTypeISRC       = 9
-	qtDataTypeBMP        = 14
-	qtDataTypeJPEG       = 13
-	qtDataTypePNG        = 14
-	qtDataTypeSInt8      = 21
-	qtDataTypeUInt8      = 22
-	qtDataTypeSInt16BE   = 23
-	qtDataTypeUInt16BE   = 24
-	qtDataTypeSInt32BE   = 25
-	qtDataTypeUInt32BE   = 26
-	qtDataTypeSInt64BE   = 27
-	qtDataTypeUInt64BE   = 28
-	qtDataTypeFloat32BE  = 29
-	qtDataTypeFloat64BE  = 30
+	qtDataTypeUTF8      = 1
+	qtDataTypeUTF16BE   = 2
+	qtDataTypeSJIS      = 3
+	qtDataTypeHTML      = 6
+	qtDataTypeXML       = 7
+	qtDataTypeUUID      = 8
+	qtDataTypeISRC      = 9
+	qtDataTypeBMP       = 14
+	qtDataTypeJPEG      = 13
+	qtDataTypePNG       = 14
+	qtDataTypeSInt8     = 21
+	qtDataTypeUInt8     = 22
+	qtDataTypeSInt16BE  = 23
+	qtDataTypeUInt16BE  = 24
+	qtDataTypeSInt32BE  = 25
+	qtDataTypeUInt32BE  = 26
+	qtDataTypeSInt64BE  = 27
+	qtDataTypeUInt64BE  = 28
+	qtDataTypeFloat32BE = 29
+	qtDataTypeFloat64BE = 30
 )
 
 // decodeIlst parses the ilst (item list) box containing QuickTime metadata atoms.
@@ -113,7 +111,7 @@ func (d *videoDecoderMP4) decodeFreeformAtom(atomStart int64, atomSize uint64) {
 
 		switch subTypeStr {
 		case "mean":
-			_ = d.readBytes(4) // version + flags
+			_ = d.readBytes(4)            // version + flags
 			valueLen := int(subSize) - 12 // 8 (header) + 4 (version+flags)
 			if valueLen > 0 {
 				mean = string(d.readBytes(valueLen))
@@ -222,23 +220,6 @@ func decodeUTF16BE(data []byte) string {
 	return string(runes)
 }
 
-// parseQuickTimeDate parses a QuickTime date string like "2024-06-15T10:30:00+0200".
-func parseQuickTimeDate(s string) (time.Time, error) {
-	formats := []string{
-		"2006-01-02T15:04:05-0700",
-		"2006-01-02T15:04:05Z",
-		"2006-01-02T15:04:05",
-		"2006-01-02 15:04:05",
-		time.RFC3339,
-	}
-	for _, f := range formats {
-		if t, err := time.Parse(f, s); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("unrecognized date format: %q", s)
-}
-
 // freeformToTagName maps com.apple.quicktime freeform atoms to exiftool tag names.
 func freeformToTagName(mean, name string) string {
 	if mean != "com.apple.quicktime" {
@@ -253,30 +234,30 @@ func freeformToTagName(mean, name string) string {
 
 // freeformTagNames maps com.apple.quicktime key names to exiftool tag names.
 var freeformTagNames = map[string]string{
-	"make":               "Make",
-	"model":              "Model",
-	"software":           "Software",
-	"creationdate":       "CreationDate",
-	"location.ISO6709":   "GPSCoordinates",
-	"location.role":      "LocationRole",
-	"location.body":      "LocationBody",
-	"location.note":      "LocationNote",
-	"camera.identifier":  "CameraIdentifier",
+	"make":                                  "Make",
+	"model":                                 "Model",
+	"software":                              "Software",
+	"creationdate":                          "CreationDate",
+	"location.ISO6709":                      "GPSCoordinates",
+	"location.role":                         "LocationRole",
+	"location.body":                         "LocationBody",
+	"location.note":                         "LocationNote",
+	"camera.identifier":                     "CameraIdentifier",
 	"camera.framereadouttimeinmicroseconds": "CameraFrameReadoutTime",
-	"player.version":     "PlayerVersion",
-	"player.movie.visual.brightness":    "Brightness",
-	"player.movie.visual.contrast":      "Contrast",
-	"player.movie.audio.gain":           "AudioGain",
-	"player.movie.audio.treble":         "AudioTreble",
-	"player.movie.audio.bass":           "AudioBass",
-	"player.movie.audio.balance":        "AudioBalance",
-	"player.movie.audio.pitchshift":     "PitchShift",
-	"player.movie.audio.mute":           "Mute",
-	"live-photo.auto":                   "LivePhotoAuto",
-	"live-photo.vitality-score":         "LivePhotoVitalityScore",
-	"live-photo.vitality-scoring-version": "LivePhotoVitalityScoringVersion",
-	"content.identifier": "ContentIdentifier",
-	"detected-face.count": "DetectedFaceCount",
+	"player.version":                        "PlayerVersion",
+	"player.movie.visual.brightness":        "Brightness",
+	"player.movie.visual.contrast":          "Contrast",
+	"player.movie.audio.gain":               "AudioGain",
+	"player.movie.audio.treble":             "AudioTreble",
+	"player.movie.audio.bass":               "AudioBass",
+	"player.movie.audio.balance":            "AudioBalance",
+	"player.movie.audio.pitchshift":         "PitchShift",
+	"player.movie.audio.mute":               "Mute",
+	"live-photo.auto":                       "LivePhotoAuto",
+	"live-photo.vitality-score":             "LivePhotoVitalityScore",
+	"live-photo.vitality-scoring-version":   "LivePhotoVitalityScoringVersion",
+	"content.identifier":                    "ContentIdentifier",
+	"detected-face.count":                   "DetectedFaceCount",
 }
 
 // ilstAtomToTagName maps standard ilst atom types to exiftool tag names.
@@ -289,63 +270,63 @@ func ilstAtomToTagName(atomType string) string {
 
 // Standard ilst atom type to exiftool tag name mapping.
 var ilstTagNames = map[string]string{
-	"\xa9nam": "Title",
-	"\xa9ART": "Artist",
-	"\xa9alb": "Album",
-	"\xa9day": "ContentCreateDate",
-	"\xa9too": "Encoder",
-	"\xa9cmt": "Comment",
-	"\xa9gen": "Genre",
-	"\xa9wrt": "Composer",
-	"\xa9grp": "Grouping",
-	"\xa9lyr": "Lyrics",
-	"\xa9des": "Description",
-	"\xa9enc": "EncodedBy",
-	"\xa9dir": "Director",
-	"\xa9prd": "Producer",
-	"\xa9prf": "Performers",
-	"\xa9inf": "Information",
-	"\xa9req": "Requirements",
-	"\xa9fmt": "Format",
-	"\xa9src": "Source",
-	"\xa9swr": "SoftwareVersion",
-	"\xa9xyz": "GPSCoordinates",
-	"aART":    "AlbumArtist",
-	"trkn":    "TrackNumber",
-	"disk":    "DiskNumber",
-	"tmpo":    "BeatsPerMinute",
-	"cpil":    "Compilation",
-	"covr":    "CoverArt",
-	"pgap":    "PlayGap",
-	"gnre":    "GenreID",
-	"cprt":    "Copyright",
-	"desc":    "Description",
-	"ldes":    "LongDescription",
-	"catg":    "Category",
-	"keyw":    "Keyword",
-	"purd":    "PurchaseDate",
-	"pcst":    "Podcast",
-	"purl":    "PodcastURL",
-	"hdvd":    "HDVideo",
-	"stik":    "MediaType",
-	"rtng":    "Rating",
-	"apID":    "AppleStoreAccount",
-	"sfID":    "AppleStoreCountry",
-	"akID":    "AppleStoreAccountType",
-	"cnID":    "AppleStoreCatalogID",
-	"geID":    "GenreID",
-	"atID":    "ArtistID",
-	"plID":    "PlaylistID",
-	"cmID":    "ComposerID",
-	"sonm":    "SortName",
-	"soar":    "SortArtist",
-	"soal":    "SortAlbum",
-	"soco":    "SortComposer",
-	"sosn":    "SortShow",
-	"tvsh":    "TVShow",
-	"tvsn":    "TVSeason",
-	"tves":    "TVEpisode",
-	"tvnn":    "TVNetwork",
-	"pcsn":    "SortPodcast",
+	"\xa9nam":                 "Title",
+	"\xa9ART":                 "Artist",
+	"\xa9alb":                 "Album",
+	"\xa9day":                 "ContentCreateDate",
+	"\xa9too":                 "Encoder",
+	"\xa9cmt":                 "Comment",
+	"\xa9gen":                 "Genre",
+	"\xa9wrt":                 "Composer",
+	"\xa9grp":                 "Grouping",
+	"\xa9lyr":                 "Lyrics",
+	"\xa9des":                 "Description",
+	"\xa9enc":                 "EncodedBy",
+	"\xa9dir":                 "Director",
+	"\xa9prd":                 "Producer",
+	"\xa9prf":                 "Performers",
+	"\xa9inf":                 "Information",
+	"\xa9req":                 "Requirements",
+	"\xa9fmt":                 "Format",
+	"\xa9src":                 "Source",
+	"\xa9swr":                 "SoftwareVersion",
+	"\xa9xyz":                 "GPSCoordinates",
+	"aART":                    "AlbumArtist",
+	"trkn":                    "TrackNumber",
+	"disk":                    "DiskNumber",
+	"tmpo":                    "BeatsPerMinute",
+	"cpil":                    "Compilation",
+	"covr":                    "CoverArt",
+	"pgap":                    "PlayGap",
+	"gnre":                    "GenreID",
+	"cprt":                    "Copyright",
+	"desc":                    "Description",
+	"ldes":                    "LongDescription",
+	"catg":                    "Category",
+	"keyw":                    "Keyword",
+	"purd":                    "PurchaseDate",
+	"pcst":                    "Podcast",
+	"purl":                    "PodcastURL",
+	"hdvd":                    "HDVideo",
+	"stik":                    "MediaType",
+	"rtng":                    "Rating",
+	"apID":                    "AppleStoreAccount",
+	"sfID":                    "AppleStoreCountry",
+	"akID":                    "AppleStoreAccountType",
+	"cnID":                    "AppleStoreCatalogID",
+	"geID":                    "GenreID",
+	"atID":                    "ArtistID",
+	"plID":                    "PlaylistID",
+	"cmID":                    "ComposerID",
+	"sonm":                    "SortName",
+	"soar":                    "SortArtist",
+	"soal":                    "SortAlbum",
+	"soco":                    "SortComposer",
+	"sosn":                    "SortShow",
+	"tvsh":                    "TVShow",
+	"tvsn":                    "TVSeason",
+	"tves":                    "TVEpisode",
+	"tvnn":                    "TVNetwork",
+	"pcsn":                    "SortPodcast",
 	strings.Repeat("\x00", 4): "", // Null atom — skip.
 }

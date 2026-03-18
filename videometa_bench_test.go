@@ -15,7 +15,7 @@ func BenchmarkDecodeMinimalMP4AllSources(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		r := newBytesReadSeeker(data)
-		Decode(Options{
+		_, _ = Decode(Options{
 			R:       r,
 			Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
 			HandleTag: func(ti TagInfo) error {
@@ -35,7 +35,7 @@ func BenchmarkDecodeMinimalMP4ConfigOnly(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		r := newBytesReadSeeker(data)
-		Decode(Options{
+		_, _ = Decode(Options{
 			R:       r,
 			Sources: CONFIG,
 			HandleTag: func(ti TagInfo) error {
@@ -55,7 +55,7 @@ func BenchmarkDecodeMinimalMP4QuickTime(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		r := newBytesReadSeeker(data)
-		Decode(Options{
+		_, _ = Decode(Options{
 			R:       r,
 			Sources: QUICKTIME,
 			HandleTag: func(ti TagInfo) error {
@@ -75,7 +75,7 @@ func BenchmarkDecodeAllMinimalMP4(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		r := newBytesReadSeeker(data)
-		DecodeAll(Options{
+		_, _, _ = DecodeAll(Options{
 			R:       r,
 			Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
 		})

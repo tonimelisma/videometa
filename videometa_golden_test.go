@@ -16,9 +16,9 @@ func TestGoldenWithGPSQuickTimeTags(t *testing.T) {
 
 	f, err := os.Open("testdata/with_gps.mp4")
 	c.Assert(err, qt.IsNil)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
-	tags, err := DecodeAll(Options{R: f, Sources: QUICKTIME | CONFIG})
+	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME | CONFIG})
 	c.Assert(err, qt.IsNil)
 
 	// Load golden file for comparison.
@@ -62,9 +62,9 @@ func TestGoldenWithGPSLatLong(t *testing.T) {
 
 	f, err := os.Open("testdata/with_gps.mp4")
 	c.Assert(err, qt.IsNil)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
-	tags, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
+	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
 	c.Assert(err, qt.IsNil)
 
 	lat, lon, err := tags.GetLatLong()
@@ -79,9 +79,9 @@ func TestGoldenWithGPSGetDateTime(t *testing.T) {
 
 	f, err := os.Open("testdata/with_gps.mp4")
 	c.Assert(err, qt.IsNil)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
-	tags, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
+	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
 	c.Assert(err, qt.IsNil)
 
 	dt, err := tags.GetDateTime()
@@ -97,9 +97,9 @@ func TestGoldenExifToolQuickTimeMOV(t *testing.T) {
 
 	f, err := os.Open("testdata/exiftool_quicktime.mov")
 	c.Assert(err, qt.IsNil)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
-	tags, err := DecodeAll(Options{R: f, Sources: QUICKTIME | CONFIG})
+	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME | CONFIG})
 	c.Assert(err, qt.IsNil)
 
 	// This file is from exiftool test suite — rich QuickTime metadata.
@@ -113,6 +113,51 @@ func TestGoldenExifToolQuickTimeMOV(t *testing.T) {
 	ts, ok := all["TimeScale"]
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(ts.Value, qt.Equals, uint32(600))
+}
+
+// Validates: REQ-NF-04
+func TestGoldenMinimalMP4AllQuickTimeTags(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
+	c.Assert(err, qt.IsNil)
+	qtTags := tags.QuickTime()
+
+	golden := loadGolden(c, "testdata/minimal.mp4.exiftool.json")
+	qtGolden := golden["QuickTime"].(map[string]any)
+
+	// Compare all golden QuickTime tags that we emit.
+	compareGoldenTag(c, qtTags, qtGolden, "MajorBrand")
+	compareGoldenTag(c, qtTags, qtGolden, "MinorVersion")
+	compareGoldenTag(c, qtTags, qtGolden, "MatrixStructure")
+	compareGoldenTag(c, qtTags, qtGolden, "HandlerDescription")
+	compareGoldenTag(c, qtTags, qtGolden, "GraphicsMode")
+	compareGoldenTag(c, qtTags, qtGolden, "OpColor")
+	compareGoldenTag(c, qtTags, qtGolden, "CompressorName")
+	compareGoldenTag(c, qtTags, qtGolden, "PixelAspectRatio")
+
+	// Numeric comparisons.
+	c.Assert(qtTags["VideoFrameRate"].Value, qt.Equals, float64(qtGolden["VideoFrameRate"].(float64)))
+	c.Assert(qtTags["SourceImageWidth"].Value, qt.Equals, int(qtGolden["SourceImageWidth"].(float64)))
+	c.Assert(qtTags["SourceImageHeight"].Value, qt.Equals, int(qtGolden["SourceImageHeight"].(float64)))
+	c.Assert(qtTags["BitDepth"].Value, qt.Equals, int(qtGolden["BitDepth"].(float64)))
+	c.Assert(qtTags["XResolution"].Value, qt.Equals, int(qtGolden["XResolution"].(float64)))
+	c.Assert(qtTags["YResolution"].Value, qt.Equals, int(qtGolden["YResolution"].(float64)))
+}
+
+// compareGoldenTag checks that a string-valued tag matches the golden file.
+func compareGoldenTag(c *qt.C, tags map[string]TagInfo, golden map[string]any, name string) {
+	c.Helper()
+	tag, ok := tags[name]
+	c.Assert(ok, qt.IsTrue, qt.Commentf("missing tag %q", name))
+	goldenVal, ok := golden[name]
+	c.Assert(ok, qt.IsTrue, qt.Commentf("missing golden tag %q", name))
+	c.Assert(toString(tag.Value), qt.Equals, toString(goldenVal),
+		qt.Commentf("tag %q: got %v, want %v", name, tag.Value, goldenVal))
 }
 
 func loadGolden(c *qt.C, path string) map[string]any {

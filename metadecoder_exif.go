@@ -1,8 +1,8 @@
 package videometa
 
 import (
+	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"math"
 	"strings"
@@ -49,20 +49,19 @@ func exifTypeSize(typ uint16) int {
 // metaDecoderEXIF decodes EXIF IFD structures from a byte buffer.
 type metaDecoderEXIF struct {
 	*streamReader
-	tiffHeaderOffset int64 // Offset of TIFF header in the original stream.
-	opts             Options
-	seenIFDs         map[int64]bool // Prevent infinite IFD loops.
+	opts     Options
+	seenIFDs map[int64]bool // Prevent infinite IFD loops.
 
 	// GPS tag accumulation for coordinate conversion.
-	gpsLatRef  string
-	gpsLonRef  string
-	gpsLat     [3]float64
-	gpsLon     [3]float64
-	hasGPSLat  bool
-	hasGPSLon  bool
-	gpsAltRef  uint8
-	gpsAlt     float64
-	hasGPSAlt  bool
+	gpsLatRef string
+	gpsLonRef string
+	gpsLat    [3]float64
+	gpsLon    [3]float64
+	hasGPSLat bool
+	hasGPSLon bool
+	gpsAltRef uint8
+	gpsAlt    float64
+	hasGPSAlt bool
 }
 
 // decodeEXIF parses EXIF data from the given ReadSeeker.
@@ -170,9 +169,10 @@ func (ed *metaDecoderEXIF) decodeTag(d *videoDecoderMP4, namespace string, field
 	if subIFDName, ok := exifIFDPointers[tagID]; ok {
 		ed.seek(int64(rawValue))
 		subFields := exifFields
-		if subIFDName == "GPSInfoIFD" {
+		switch subIFDName {
+		case "GPSInfoIFD":
 			subFields = exifFieldsGPS
-		} else if subIFDName == "InteropIFD" {
+		case "InteropIFD":
 			subFields = exifInteropFields
 		}
 		ed.decodeTags(d, subIFDName, subFields)
@@ -210,6 +210,22 @@ func (ed *metaDecoderEXIF) decodeTag(d *videoDecoderMP4, namespace string, field
 
 	// Skip raw GPS coordinate arrays — we emit converted decimal degrees instead.
 	if namespace == "GPSInfoIFD" && (tagID == 0x0002 || tagID == 0x0004) {
+		return
+	}
+
+	// Route IPTC data embedded in EXIF ApplicationNotes tag (0x83BB).
+	if tagID == 0x83BB && typ == exifTypeUndef {
+		if data, ok := value.([]byte); ok && d.opts.Sources.Has(IPTC) {
+			d.decodeIPTC(bytes.NewReader(data))
+		}
+		return
+	}
+
+	// Route MakerNotes (0x927C) to manufacturer-specific decoder.
+	if tagID == 0x927C {
+		if data, ok := value.([]byte); ok {
+			d.decodeMakerNotes(data)
+		}
 		return
 	}
 
@@ -412,24 +428,12 @@ func rationalsToFloats(v any) [3]float64 {
 	return result
 }
 
-// emitEXIFTag sends an EXIF source tag to the callback.
+// emitEXIFTag sends an EXIF source tag via the centralized emitTag.
 func (d *videoDecoderMP4) emitEXIFTag(name, namespace string, value any) {
-	if d.opts.HandleTag == nil {
-		return
-	}
-	ti := TagInfo{
+	d.emitTag(TagInfo{
 		Source:    EXIF,
 		Tag:       name,
 		Namespace: namespace,
 		Value:     value,
-	}
-	if d.opts.ShouldHandleTag != nil && !d.opts.ShouldHandleTag(ti) {
-		return
-	}
-	if err := d.opts.HandleTag(ti); err != nil {
-		panic(err)
-	}
+	})
 }
-
-// Suppress unused import warnings.
-var _ = fmt.Sprintf
