@@ -15,13 +15,13 @@ import (
 type Source uint32
 
 const (
-	EXIF      Source = 1 << iota // EXIF IFD data
-	XMP                          // XMP/RDF XML
-	IPTC                         // IPTC-IIM records
-	QUICKTIME                    // QuickTime native metadata (ilst, freeform atoms)
-	CONFIG                       // Codec/dimension info from container structure
-	MAKERNOTES                   // Manufacturer-specific metadata (Pentax TAGS, etc.)
-	XML                          // Structured XML metadata (Sony NRTM, etc.)
+	EXIF       Source = 1 << iota // EXIF IFD data
+	XMP                           // XMP/RDF XML
+	IPTC                          // IPTC-IIM records
+	QUICKTIME                     // QuickTime native metadata (ilst, freeform atoms)
+	CONFIG                        // Codec/dimension info from container structure
+	MAKERNOTES                    // Manufacturer-specific metadata (Pentax TAGS, etc.)
+	XML                           // Structured XML metadata (Sony NRTM, etc.)
 )
 
 // Has reports whether s contains the given source.

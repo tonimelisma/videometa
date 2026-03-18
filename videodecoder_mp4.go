@@ -1421,33 +1421,3 @@ func (d *videoDecoderMP4) decodeGmin() {
 		d.emitQuickTimeTag("GenBalance", fixedPoint88ToFloat(balance))
 	}
 }
-
-// decodeNRTMMeta handles a top-level meta box with handler type "nrtm" (Sony
-// Non-Real Time Metadata). Reads idat to find and parse the XML content.
-func (d *videoDecoderMP4) decodeNRTMMeta(metaStart int64, metaSize uint64) {
-	metaEnd := metaStart + int64(metaSize)
-
-	// Read remaining meta content to find the XML data within idat.
-	// The meta box contains hdlr, dinf, iinf, iloc, and idat sub-boxes.
-	// The XML is inside idat, preceded by LPIF binary data.
-	for d.pos() < metaEnd {
-		subStart := d.pos()
-		subSize, subType, isEOF := d.readBoxHeader()
-		if isEOF || subSize < 8 {
-			break
-		}
-
-		if subType.String() == "idat" {
-			dataLen := int(subSize) - 8
-			if dataLen > 0 && dataLen < 1024*1024 {
-				data := d.readBytes(dataLen)
-				xmlData := scanForXMLInMeta(data)
-				if xmlData != nil && d.opts.Sources.Has(XML) {
-					d.decodeSonyNRTM(bytes.NewReader(xmlData))
-				}
-			}
-		}
-
-		d.seekToBoxEnd(subStart, subSize)
-	}
-}

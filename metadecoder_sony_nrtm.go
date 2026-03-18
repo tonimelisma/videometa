@@ -6,8 +6,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 )
 
 // decodeSonyNRTM parses Sony NonRealTimeMeta XML and emits tags matching
@@ -213,32 +211,20 @@ func scanForXMLInMeta(data []byte) []byte {
 	return data[idx:]
 }
 
-// capitalizeFirstRune uppercases the first rune in s. Used for XML tag name normalization.
-func capitalizeFirstRune(s string) string {
-	if s == "" {
-		return s
-	}
-	r, size := utf8.DecodeRuneInString(s)
-	if unicode.IsUpper(r) {
-		return s
-	}
-	return string(unicode.ToUpper(r)) + s[size:]
-}
-
 // nrtmRoot mirrors the top-level NonRealTimeMeta XML structure.
 type nrtmRoot struct {
-	XMLName        xml.Name        `xml:"NonRealTimeMeta"`
-	LastUpdate     string          `xml:"lastUpdate,attr"`
-	TargetMaterial nrtmTarget      `xml:"TargetMaterial"`
-	Duration       nrtmDuration    `xml:"Duration"`
-	LtcChangeTable nrtmLtcTable    `xml:"LtcChangeTable"`
-	CreationDate   nrtmDuration    `xml:"CreationDate"`
-	KlvPacketTable nrtmKlvTable    `xml:"KlvPacketTable"`
-	VideoFormat    nrtmVideoFormat `xml:"VideoFormat"`
-	AudioFormat    nrtmAudioFormat `xml:"AudioFormat"`
-	Device         nrtmDevice      `xml:"Device"`
-	RecordingMode  nrtmRecMode     `xml:"RecordingMode"`
-	AcquisitionRecord nrtmAcqRecord `xml:"AcquisitionRecord"`
+	XMLName           xml.Name        `xml:"NonRealTimeMeta"`
+	LastUpdate        string          `xml:"lastUpdate,attr"`
+	TargetMaterial    nrtmTarget      `xml:"TargetMaterial"`
+	Duration          nrtmDuration    `xml:"Duration"`
+	LtcChangeTable    nrtmLtcTable    `xml:"LtcChangeTable"`
+	CreationDate      nrtmDuration    `xml:"CreationDate"`
+	KlvPacketTable    nrtmKlvTable    `xml:"KlvPacketTable"`
+	VideoFormat       nrtmVideoFormat `xml:"VideoFormat"`
+	AudioFormat       nrtmAudioFormat `xml:"AudioFormat"`
+	Device            nrtmDevice      `xml:"Device"`
+	RecordingMode     nrtmRecMode     `xml:"RecordingMode"`
+	AcquisitionRecord nrtmAcqRecord   `xml:"AcquisitionRecord"`
 }
 
 type nrtmTarget struct {
@@ -273,8 +259,8 @@ type nrtmKlvPacket struct {
 }
 
 type nrtmVideoFormat struct {
-	VideoRecPort nrtmPort       `xml:"VideoRecPort"`
-	VideoFrame   nrtmVideoFrame `xml:"VideoFrame"`
+	VideoRecPort nrtmPort        `xml:"VideoRecPort"`
+	VideoFrame   nrtmVideoFrame  `xml:"VideoFrame"`
 	VideoLayout  nrtmVideoLayout `xml:"VideoLayout"`
 }
 
@@ -295,7 +281,7 @@ type nrtmVideoLayout struct {
 }
 
 type nrtmAudioFormat struct {
-	NumOfChannel  string         `xml:"numOfChannel,attr"`
+	NumOfChannel  string          `xml:"numOfChannel,attr"`
 	AudioRecPorts []nrtmAudioPort `xml:"AudioRecPort"`
 }
 
