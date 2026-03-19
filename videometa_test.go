@@ -10,7 +10,7 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// Validates: REQ-BOX-01, REQ-BOX-06, REQ-API-01
+// Validates: REQ-BOX-01, REQ-BOX-04, REQ-BOX-06, REQ-API-01
 func TestDecodeMinimalMP4(t *testing.T) {
 	c := qt.New(t)
 
@@ -382,7 +382,7 @@ func TestDecodeAllReturnsVideoConfig(t *testing.T) {
 	c.Assert(result.VideoConfig.Codec, qt.Equals, "avc1")
 }
 
-// Validates: REQ-API-09
+// Validates: REQ-API-09, REQ-EXIF-06
 func TestWarnfCallback(t *testing.T) {
 	c := qt.New(t)
 
@@ -479,7 +479,7 @@ func TestHandleTagFieldsPopulated(t *testing.T) {
 	c.Assert(found, qt.IsTrue)
 }
 
-// Validates: REQ-API-14, REQ-CFG-01, REQ-CFG-02, REQ-CFG-03, REQ-CFG-04
+// Validates: REQ-API-14, REQ-CFG-01, REQ-CFG-02, REQ-CFG-03, REQ-CFG-04, REQ-QT-05
 func TestVideoConfig(t *testing.T) {
 	c := qt.New(t)
 	f, err := os.Open("testdata/minimal.mp4")

@@ -9,7 +9,7 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// Validates: REQ-XMP-01
+// Validates: REQ-XMP-01, REQ-XMP-02
 func TestDecodeXMPBasic(t *testing.T) {
 	c := qt.New(t)
 

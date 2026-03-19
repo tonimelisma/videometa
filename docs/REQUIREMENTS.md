@@ -178,82 +178,82 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 
 Mapping REQ-* → ARCH-* → source file → test file. Updated as implementation proceeds.
 
-| Requirement | Architecture | Source File | Test File |
-|-------------|-------------|-------------|-----------|
-| REQ-API-01 | ARCH-FLOW-01 | videometa.go | videometa_test.go |
-| REQ-API-02 | ARCH-FLOW-01 | videometa.go | videometa_test.go |
-| REQ-API-03 | ARCH-IO-01, ARCH-IO-05 | io.go, videometa.go | io_test.go, videometa_test.go |
-| REQ-API-04 | ARCH-BOX-05 | videometa.go, videodecoder_mp4.go | videometa_test.go |
-| REQ-API-05 | ARCH-FLOW-01 | videometa.go | videometa_test.go |
-| REQ-API-06 | ARCH-FLOW-01 | videometa.go | videometa_test.go |
-| REQ-API-07 | ARCH-FLOW-01 | videometa.go | videometa_test.go |
-| REQ-API-08 | ARCH-DEC-03 | metadecoder_xmp.go | videometa_test.go |
-| REQ-API-09 | ARCH-ERR-05 | videometa.go | videometa_test.go |
-| REQ-API-10 | ARCH-ERR-04 | videometa.go | videometa_test.go |
-| REQ-API-11 | ARCH-FLOW-01 | videometa.go | videometa_test.go |
-| REQ-API-12 | ARCH-FLOW-01 | videometa.go | videometa_test.go |
-| REQ-API-13 | ARCH-FLOW-01 | videometa.go | videometa_test.go |
-| REQ-API-14 | ARCH-FLOW-01 | videometa.go | videometa_test.go |
-| REQ-API-15 | ARCH-ERR-02 | videometa.go | videometa_test.go |
-| REQ-API-16 | ARCH-FLOW-01 | videometa.go | videometa_test.go |
-| REQ-API-17 | ARCH-ERR-05 | videometa.go | videometa_test.go |
-| REQ-API-18 | ARCH-ERR-05 | videometa.go, videodecoder_mp4.go | videometa_test.go |
-| REQ-BOX-01 | ARCH-BOX-02 | videodecoder_mp4.go | videometa_test.go |
-| REQ-BOX-02 | ARCH-BOX-02 | videodecoder_mp4.go | videometa_test.go |
-| REQ-BOX-03 | ARCH-BOX-02 | videodecoder_mp4.go | videometa_test.go |
-| REQ-BOX-04 | ARCH-BOX-02 | videodecoder_mp4.go | videometa_test.go |
-| REQ-BOX-05 | ARCH-BOX-03 | videodecoder_mp4.go | videometa_test.go |
-| REQ-BOX-06 | ARCH-BOX-05 | videodecoder_mp4.go | videometa_test.go |
-| REQ-BOX-07 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
-| REQ-BOX-08 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
-| REQ-EXIF-01 | ARCH-DEC-02 | metadecoder_exif.go | metadecoder_exif_test.go |
-| REQ-EXIF-02 | ARCH-DEC-02, ARCH-IO-02 | metadecoder_exif.go, io.go | metadecoder_exif_test.go |
-| REQ-EXIF-03 | ARCH-DEC-02 | metadecoder_exif.go | metadecoder_exif_test.go |
-| REQ-EXIF-04 | ARCH-DEC-02 | metadecoder_exif_fields.go | videometa_test.go |
-| REQ-EXIF-05 | ARCH-DEC-06 | metadecoder_exif.go | metadecoder_exif_test.go |
-| REQ-EXIF-06 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
-| REQ-EXIF-07 | ARCH-DEC-08 | metadecoder_makernotes_pentax.go | videometa_test.go |
-| REQ-EXIF-08 | ARCH-DEC-08 | metadecoder_makernotes_pentax.go | videometa_test.go |
-| REQ-EXIF-09 | ARCH-DEC-08 | metadecoder_makernotes_pentax.go | videometa_test.go |
-| REQ-XMP-01 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go |
-| REQ-XMP-02 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go |
-| REQ-XMP-03 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go |
-| REQ-XMP-04 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
-| REQ-XMP-05 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go |
-| REQ-XMP-06 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go |
-| REQ-IPTC-01 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go |
-| REQ-IPTC-02 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go |
-| REQ-IPTC-03 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go |
-| REQ-IPTC-04 | ARCH-DEC-04 | metadecoder_exif.go, metadecoder_iptc.go | metadecoder_iptc_test.go |
-| REQ-QT-01 | ARCH-DEC-05 | metadecoder_quicktime.go | videometa_test.go |
-| REQ-QT-02 | ARCH-DEC-05 | metadecoder_quicktime.go | videometa_test.go |
-| REQ-QT-03 | ARCH-DEC-05 | metadecoder_quicktime.go | videometa_test.go |
-| REQ-QT-04 | ARCH-DEC-05, ARCH-BOX-04 | metadecoder_quicktime.go, videodecoder_mp4.go | videometa_test.go |
-| REQ-QT-05 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
-| REQ-QT-06 | ARCH-DEC-05 | helpers.go | helpers_test.go, videometa_test.go |
-| REQ-QT-07 | ARCH-DEC-07 | metadecoder_quicktime_fields.go | videometa_test.go |
-| REQ-QT-08 | ARCH-DEC-05 | metadecoder_quicktime.go | videometa_test.go |
-| REQ-CFG-01 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
-| REQ-CFG-02 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
-| REQ-CFG-03 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
-| REQ-CFG-04 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
-| REQ-NF-01 | ARCH-IO-01 | io.go | io_test.go |
-| REQ-NF-02 | ARCH-IO-04 | io.go | videometa_bench_test.go |
-| REQ-NF-03 | ARCH-TEST-06 | videometa_bench_test.go | — |
-| REQ-NF-04 | ARCH-TEST-01, ARCH-TEST-02 | gen/main.go | videometa_test.go |
-| REQ-NF-05 | ARCH-TEST-05 | videometa_fuzz_test.go | — |
-| REQ-NF-06 | ARCH-ERR-01 | helpers.go | videometa_test.go, videometa_fuzz_test.go |
-| REQ-NF-07 | — | go.mod | — |
-| REQ-NF-08 | ARCH-DEP-01 | go.mod | — |
-| REQ-NF-09 | — | LICENSE | — |
-| REQ-NF-10 | ARCH-TEST-03 | .github/workflows/ci.yml | — |
-| REQ-TEST-01 | ARCH-TEST-01 | testdata/ | videometa_test.go |
-| REQ-TEST-02 | ARCH-TEST-01 | testdata/ | videometa_test.go |
-| REQ-TEST-03 | ARCH-TEST-01 | testdata/ | videometa_test.go |
-| REQ-TEST-04 | ARCH-TEST-01 | testdata/ | videometa_test.go |
-| REQ-TEST-05 | ARCH-TEST-01 | testdata/ | videometa_test.go |
-| REQ-TEST-06 | ARCH-TEST-01 | testdata/ | videometa_test.go |
-| REQ-TEST-07 | ARCH-TEST-01 | testdata/ | videometa_test.go |
-| REQ-TEST-08 | ARCH-TEST-01 | testdata/ | videometa_test.go |
-| REQ-TEST-09 | ARCH-TEST-01 | testdata/ | videometa_test.go |
-| REQ-TEST-10 | ARCH-TEST-01 | testdata/ | videometa_test.go |
+| Requirement | Architecture | Source File | Test File | Status |
+|-------------|-------------|-------------|-----------|--------|
+| REQ-API-01 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-02 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-03 | ARCH-IO-01, ARCH-IO-05 | io.go, videometa.go | io_test.go, videometa_test.go | Validated |
+| REQ-API-04 | ARCH-BOX-05 | videometa.go, videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-API-05 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-06 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-07 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-08 | ARCH-DEC-03 | metadecoder_xmp.go | videometa_test.go | Validated |
+| REQ-API-09 | ARCH-ERR-05 | videometa.go | videometa_test.go | Validated |
+| REQ-API-10 | ARCH-ERR-04 | videometa.go | videometa_test.go | Validated |
+| REQ-API-11 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-12 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-13 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-14 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-15 | ARCH-ERR-02 | videometa.go | videometa_test.go | Validated |
+| REQ-API-16 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-17 | ARCH-ERR-05 | videometa.go | videometa_test.go | Validated |
+| REQ-API-18 | ARCH-ERR-05 | videometa.go, videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-BOX-01 | ARCH-BOX-02 | videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-BOX-02 | ARCH-BOX-02 | videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-BOX-03 | ARCH-BOX-02 | videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-BOX-04 | ARCH-BOX-02 | videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-BOX-05 | ARCH-BOX-03 | videodecoder_mp4.go | videometa_test.go, videometa_golden_test.go | Validated |
+| REQ-BOX-06 | ARCH-BOX-05 | videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-BOX-07 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-BOX-08 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-EXIF-01 | ARCH-DEC-02 | metadecoder_exif.go | metadecoder_exif_test.go | Validated |
+| REQ-EXIF-02 | ARCH-DEC-02, ARCH-IO-02 | metadecoder_exif.go, io.go | metadecoder_exif_test.go | Validated |
+| REQ-EXIF-03 | ARCH-DEC-02 | metadecoder_exif.go | metadecoder_exif_test.go | Validated |
+| REQ-EXIF-04 | ARCH-DEC-02 | metadecoder_exif_fields.go | videometa_test.go | Validated |
+| REQ-EXIF-05 | ARCH-DEC-06 | metadecoder_exif.go, helpers.go | metadecoder_exif_test.go, helpers_test.go | Validated |
+| REQ-EXIF-06 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-EXIF-07 | ARCH-DEC-08 | metadecoder_makernotes_pentax.go | videometa_test.go | Validated |
+| REQ-EXIF-08 | ARCH-DEC-08 | metadecoder_makernotes_pentax.go | videometa_test.go | Validated |
+| REQ-EXIF-09 | ARCH-DEC-08 | metadecoder_makernotes_pentax.go | videometa_test.go | Validated |
+| REQ-XMP-01 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
+| REQ-XMP-02 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
+| REQ-XMP-03 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
+| REQ-XMP-04 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_golden_test.go | Validated |
+| REQ-XMP-05 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
+| REQ-XMP-06 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
+| REQ-IPTC-01 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go | Validated |
+| REQ-IPTC-02 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go | Validated |
+| REQ-IPTC-03 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go | Validated |
+| REQ-IPTC-04 | ARCH-DEC-04 | metadecoder_exif.go, metadecoder_iptc.go | metadecoder_iptc_test.go | Validated |
+| REQ-QT-01 | ARCH-DEC-05 | metadecoder_quicktime.go | metadecoder_quicktime_test.go | Validated |
+| REQ-QT-02 | ARCH-DEC-05 | metadecoder_quicktime.go | metadecoder_quicktime_test.go | Validated |
+| REQ-QT-03 | ARCH-DEC-05 | metadecoder_quicktime.go | metadecoder_quicktime_test.go | Validated |
+| REQ-QT-04 | ARCH-DEC-05, ARCH-BOX-04 | metadecoder_quicktime.go, videodecoder_mp4.go | videometa_golden_test.go | Validated |
+| REQ-QT-05 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-QT-06 | ARCH-DEC-05 | helpers.go | helpers_test.go | Validated |
+| REQ-QT-07 | ARCH-DEC-07 | metadecoder_quicktime.go | videometa_golden_test.go | Validated |
+| REQ-QT-08 | ARCH-DEC-05 | metadecoder_quicktime.go | videometa_test.go | Validated |
+| REQ-CFG-01 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-CFG-02 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-CFG-03 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go, helpers_test.go | Validated |
+| REQ-CFG-04 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
+| REQ-NF-01 | ARCH-IO-01 | io.go | io_test.go | Validated |
+| REQ-NF-02 | ARCH-IO-04 | io.go | videometa_bench_test.go | Validated |
+| REQ-NF-03 | ARCH-TEST-06 | videometa_bench_test.go | videometa_bench_test.go | Validated |
+| REQ-NF-04 | ARCH-TEST-01 | gen/main.go | videometa_golden_test.go | Validated |
+| REQ-NF-05 | ARCH-TEST-05 | videometa_fuzz_test.go | videometa_fuzz_test.go | Validated |
+| REQ-NF-06 | ARCH-ERR-01 | helpers.go | videometa_test.go, helpers_test.go | Validated |
+| REQ-NF-07 | — | go.mod | — | Static |
+| REQ-NF-08 | ARCH-DEP-01 | go.mod | — | Static |
+| REQ-NF-09 | — | LICENSE | — | Static |
+| REQ-NF-10 | ARCH-TEST-03 | .github/workflows/ci.yml | — | Config |
+| REQ-TEST-01 | ARCH-TEST-01 | testdata/with_gps.mp4 | videometa_golden_test.go | Validated |
+| REQ-TEST-02 | ARCH-TEST-01 | testdata/apple.mov | videometa_golden_test.go | Validated |
+| REQ-TEST-03 | ARCH-TEST-01 | testdata/minimal.mp4 | videometa_golden_test.go | Validated |
+| REQ-TEST-04 | ARCH-TEST-01 | testdata/truncated.mp4 | videometa_golden_test.go | Validated |
+| REQ-TEST-05 | ARCH-TEST-01 | testdata/nonfaststart.mp4 | videometa_golden_test.go | Validated |
+| REQ-TEST-06 | ARCH-TEST-01 | — | — | Pending |
+| REQ-TEST-07 | ARCH-TEST-01 | — | — | Pending |
+| REQ-TEST-08 | ARCH-TEST-01 | — | — | Pending |
+| REQ-TEST-09 | ARCH-TEST-01 | testdata/sony_a6700.mp4 | videometa_golden_test.go | Validated |
+| REQ-TEST-10 | ARCH-TEST-01 | — | — | Pending |
