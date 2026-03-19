@@ -45,7 +45,8 @@ func isInvalidFormatErrorCandidate(err error) bool {
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "unexpected EOF") ||
-		strings.Contains(msg, "invalid format")
+		strings.Contains(msg, "invalid format") ||
+		strings.Contains(msg, "allocation too large")
 }
 
 // Rat represents a rational number (numerator/denominator).

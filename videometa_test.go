@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -346,25 +347,44 @@ func TestLimitNumTags(t *testing.T) {
 func TestLimitTagSize(t *testing.T) {
 	c := qt.New(t)
 
-	f, err := os.Open("testdata/minimal.mp4")
-	c.Assert(err, qt.IsNil)
-	defer func() { _ = f.Close() }()
+	decodeWithLimit := func(limit uint32) map[string]TagInfo {
+		f, err := os.Open("testdata/minimal.mp4")
+		c.Assert(err, qt.IsNil)
+		defer func() { _ = f.Close() }()
 
-	tags := make(map[string]TagInfo)
-	_, err = Decode(Options{
-		R:            f,
-		Sources:      QUICKTIME,
-		LimitTagSize: 5,
-		HandleTag: func(ti TagInfo) error {
-			tags[ti.Tag] = ti
-			return nil
-		},
-	})
-	c.Assert(err, qt.IsNil)
-	_, hasCompName := tags["CompressorName"]
-	c.Assert(hasCompName, qt.IsFalse, qt.Commentf("long CompressorName should be skipped"))
-	_, hasMajorBrand := tags["MajorBrand"]
-	c.Assert(hasMajorBrand, qt.IsTrue, qt.Commentf("short MajorBrand should be present"))
+		tags := make(map[string]TagInfo)
+		_, err = Decode(Options{
+			R:            f,
+			Sources:      QUICKTIME,
+			LimitTagSize: limit,
+			HandleTag: func(ti TagInfo) error {
+				tags[ti.Tag] = ti
+				return nil
+			},
+		})
+		c.Assert(err, qt.IsNil)
+		return tags
+	}
+
+	// Limit=5: MajorBrand "isom" (4 bytes, 4 > 5 false → passes).
+	// CompressorName (long string → filtered). Non-string TimeScale (uint32 → not checked, passes).
+	tags5 := decodeWithLimit(5)
+	_, hasMajorBrand5 := tags5["MajorBrand"]
+	c.Assert(hasMajorBrand5, qt.IsTrue, qt.Commentf("MajorBrand (4 bytes) should pass limit=5"))
+	_, hasCompName5 := tags5["CompressorName"]
+	c.Assert(hasCompName5, qt.IsFalse, qt.Commentf("CompressorName should be filtered at limit=5"))
+	_, hasTimeScale5 := tags5["TimeScale"]
+	c.Assert(hasTimeScale5, qt.IsTrue, qt.Commentf("non-string TimeScale should pass regardless of limit"))
+
+	// Limit=4: MajorBrand "isom" (4 bytes, 4 > 4 false → passes). Proves > not >=.
+	tags4 := decodeWithLimit(4)
+	_, hasMajorBrand4 := tags4["MajorBrand"]
+	c.Assert(hasMajorBrand4, qt.IsTrue, qt.Commentf("MajorBrand (4 bytes) should pass limit=4 (> not >=)"))
+
+	// Limit=3: MajorBrand "isom" (4 bytes, 4 > 3 true → filtered).
+	tags3 := decodeWithLimit(3)
+	_, hasMajorBrand3 := tags3["MajorBrand"]
+	c.Assert(hasMajorBrand3, qt.IsFalse, qt.Commentf("MajorBrand (4 bytes) should be filtered at limit=3"))
 }
 
 // Validates: REQ-API-02
@@ -401,6 +421,14 @@ func TestWarnfCallback(t *testing.T) {
 	})
 	c.Assert(len(warnings) > 0, qt.IsTrue,
 		qt.Commentf("Warnf should have been called for invalid EXIF data; got 0 warnings"))
+	foundExifWarning := false
+	for _, w := range warnings {
+		if strings.Contains(w, "invalid byte order marker") {
+			foundExifWarning = true
+		}
+	}
+	c.Assert(foundExifWarning, qt.IsTrue,
+		qt.Commentf("expected warning about invalid byte order marker, got: %v", warnings))
 }
 
 // Validates: REQ-API-02
@@ -539,15 +567,18 @@ func TestBoxSkipUnknown(t *testing.T) {
 	data = append(data, 0, 0, 0, 16, 'z', 'z', 'z', 'z')
 	data = append(data, 0, 0, 0, 0, 0, 0, 0, 0)
 
+	tags := make(map[string]TagInfo)
 	_, err := Decode(Options{
-		R:         readerSeekerFromBytes(data),
-		Sources:   QUICKTIME,
-		HandleTag: func(ti TagInfo) error { return nil },
+		R:       readerSeekerFromBytes(data),
+		Sources: QUICKTIME,
+		HandleTag: func(ti TagInfo) error {
+			tags[ti.Tag] = ti
+			return nil
+		},
 	})
-	// Should not panic on unknown box.
-	if err != nil {
-		c.Assert(IsInvalidFormat(err), qt.IsTrue)
-	}
+	// Valid ftyp + unknown box should parse without error.
+	c.Assert(err, qt.IsNil)
+	c.Assert(tags["MajorBrand"].Value, qt.Equals, "isom")
 }
 
 // Validates: REQ-QT-08
@@ -585,11 +616,13 @@ func TestDecodeMakerNotesRouting(t *testing.T) {
 	exifData := buildEXIFWithMakerNotes([]byte("UnknownMfr\x00\x00\x00\x00\x00\x00"))
 
 	var warnings []string
+	var emittedTags []TagInfo
 	bd := &baseDecoder{
 		streamReader: newStreamReader(readerSeekerFromBytes(nil)),
 		opts: Options{
 			Sources: EXIF | MAKERNOTES,
 			HandleTag: func(ti TagInfo) error {
+				emittedTags = append(emittedTags, ti)
 				return nil
 			},
 			Warnf: func(f string, a ...any) {
@@ -604,13 +637,21 @@ func TestDecodeMakerNotesRouting(t *testing.T) {
 	// decodeMakerNotes should fire a warning for unrecognized manufacturer data.
 	c.Assert(len(warnings) > 0, qt.IsTrue,
 		qt.Commentf("expected warning from decodeMakerNotes for unknown manufacturer"))
-	found := false
+	foundExpectedWarning := false
 	for _, w := range warnings {
-		if len(w) > 0 {
-			found = true
+		if strings.Contains(w, "EXIF MakerNotes not yet implemented") &&
+			strings.Contains(w, "16 bytes") {
+			foundExpectedWarning = true
 		}
 	}
-	c.Assert(found, qt.IsTrue)
+	c.Assert(foundExpectedWarning, qt.IsTrue,
+		qt.Commentf("expected warning about skipping 16 bytes of unimplemented MakerNotes, got: %v", warnings))
+
+	// No MAKERNOTES-sourced tags should be emitted for an unknown manufacturer.
+	for _, ti := range emittedTags {
+		c.Assert(ti.Source, qt.Not(qt.Equals), MAKERNOTES,
+			qt.Commentf("unexpected MAKERNOTES-sourced tag %q emitted for unknown manufacturer", ti.Tag))
+	}
 }
 
 // Validates: REQ-API-16
@@ -664,15 +705,17 @@ func TestBestEffortPartial(t *testing.T) {
 		Sources: QUICKTIME | CONFIG,
 	})
 
-	// With a non-seekable reader on a non-fast-start file, moov is after mdat.
-	// The decoder may return partial ftyp tags or an error — but must not panic.
-	if decodeErr != nil {
-		// Error is acceptable — verify it's meaningful.
-		c.Assert(decodeErr.Error(), qt.Not(qt.Equals), "")
-	} else {
-		// If no error, we should have at least ftyp-derived tags.
-		c.Assert(len(tags.All()) > 0, qt.IsTrue)
-	}
+	// nonfaststart.mp4 is ~5KB. Non-seekable reader can skip the entire mdat
+	// via io.CopyN, so decode succeeds fully.
+	c.Assert(decodeErr, qt.IsNil,
+		qt.Commentf("5KB non-fast-start file should decode fully even without seeking"))
+	all := tags.All()
+	_, hasMajorBrand := all["MajorBrand"]
+	c.Assert(hasMajorBrand, qt.IsTrue,
+		qt.Commentf("ftyp tags should be emitted"))
+	_, hasTimeScale := all["TimeScale"]
+	c.Assert(hasTimeScale, qt.IsTrue,
+		qt.Commentf("moov tags should be emitted after skipping small mdat"))
 }
 
 // Validates: REQ-BOX-03
