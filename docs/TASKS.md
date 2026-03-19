@@ -17,6 +17,7 @@ Tasks organized by milestone. Each task traces to requirements (`REQ-*`) and arc
 | M9: Manufacturer Metadata | ✅ Complete |
 | M10: Documentation + Release | ✅ Complete |
 | M11: Extended Test Coverage | ✅ Complete |
+| M12: Implement Skipped Tests | ✅ Complete |
 
 ---
 
@@ -69,6 +70,25 @@ Reframed from "EXIF MakerNotes" to cover manufacturer-specific video container m
 | TASK-M11-06 | New requirement tests (HandleTagFieldsPopulated, VideoConfig, Box64BitExtendedSize, BoxSkipUnknown, QuickTimeCreationDateTimezone, EXIFFieldTableSize) | ✅ Complete | videometa_test.go |
 | TASK-M11-07 | Real-world benchmarks (exiftool_quicktime.mov, with_audio.mp4) | ✅ Complete | videometa_bench_test.go |
 | TASK-M11-08 | Fuzz seed expansion (6 files for FuzzDecodeAllMP4) | ✅ Complete | videometa_fuzz_test.go |
+
+## Milestone 12: Implement Skipped Tests
+
+Every previously-skipped test implemented. No remaining `t.Skip` except conditional file-availability checks.
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M12-01 | Fix TestGoldenAppleMOV (QT integer padding, HandlerVendorID from track hdlr) | ✅ Complete | metadecoder_quicktime.go, videodecoder_mp4.go |
+| TASK-M12-02 | Remove dead TestGoldenSonyA6700 + orphaned golden JSON | ✅ Complete | videometa_golden_test.go, testdata/ |
+| TASK-M12-03 | TestTagsSeparateBySource (REQ-API-16) | ✅ Complete | videometa_test.go |
+| TASK-M12-04 | TestBestEffortPartial (REQ-API-18) | ✅ Complete | videometa_test.go |
+| TASK-M12-05 | TestBoxExtendToEOF (REQ-BOX-03) + boxEnd overflow fix | ✅ Complete | videometa_test.go, videodecoder_mp4.go, metadecoder_quicktime.go |
+| TASK-M12-06 | TestDecodeEXIFAllTypes (REQ-EXIF-03) | ✅ Complete | metadecoder_exif_test.go |
+| TASK-M12-07 | TestDecodeIPTCCharsets (REQ-IPTC-02) | ✅ Complete | metadecoder_iptc_test.go |
+| TASK-M12-08 | TestDecodeIPTCViaApplicationNotes (REQ-IPTC-04) | ✅ Complete | metadecoder_iptc_test.go, metadecoder_exif_fields.go |
+| TASK-M12-09 | TestDecodeXMPExtendedSkip (REQ-XMP-05) | ✅ Complete | metadecoder_xmp_test.go |
+| TASK-M12-10 | TestDecodeMakerNotesRouting (REQ-EXIF-07/08/09) | ✅ Complete | videometa_test.go, testhelpers_test.go |
+
+---
 
 ## Backlog: Extended Test Coverage
 

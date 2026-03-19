@@ -131,6 +131,48 @@ func TestDecodeXMPWithLists(t *testing.T) {
 	c.Assert(subjects, qt.DeepEquals, []string{"landscape", "sunset"})
 }
 
+// Validates: REQ-XMP-05
+func TestDecodeXMPExtendedSkip(t *testing.T) {
+	c := qt.New(t)
+
+	// XMP with xmpNote:HasExtendedXMP attribute — main packet should parse fine,
+	// the attribute should be emitted as a tag, and no error should occur despite
+	// the extended XMP data not being present.
+	xmpData := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+      xmlns:tiff="http://ns.adobe.com/tiff/1.0/"
+      xmlns:xmpNote="http://ns.adobe.com/xmp/note/"
+      tiff:Make="MainPacket"
+      xmpNote:HasExtendedXMP="abc123def456">
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>`
+
+	tags := make(map[string]TagInfo)
+	bd := &baseDecoder{
+		streamReader: newStreamReader(strings.NewReader("")),
+		opts: Options{
+			Sources: XMP,
+			HandleTag: func(ti TagInfo) error {
+				tags[ti.Tag] = ti
+				return nil
+			},
+		},
+		result: &DecodeResult{},
+	}
+	d := &videoDecoderMP4{baseDecoder: bd}
+
+	err := d.decodeXMP(strings.NewReader(xmpData))
+	c.Assert(err, qt.IsNil)
+
+	// Main packet tags are present.
+	c.Assert(tags["Make"].Value, qt.Equals, "MainPacket")
+	// HasExtendedXMP is emitted as a normal attribute tag.
+	c.Assert(tags["HasExtendedXMP"].Value, qt.Equals, "abc123def456")
+}
+
 // Validates: REQ-XMP-06
 func TestDecodeXMPHandleXMPEscapeHatch(t *testing.T) {
 	c := qt.New(t)

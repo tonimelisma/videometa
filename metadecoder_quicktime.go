@@ -33,7 +33,7 @@ const (
 
 // decodeIlst parses the ilst (item list) box containing QuickTime metadata atoms.
 func (d *videoDecoderMP4) decodeIlst(ilstStart int64, ilstSize uint64) {
-	ilstEnd := ilstStart + int64(ilstSize)
+	ilstEnd := boxEnd(ilstStart, ilstSize)
 	for d.pos() < ilstEnd {
 		atomStart := d.pos()
 		atomSize, atomType, isEOF := d.readBoxHeader()
@@ -42,7 +42,7 @@ func (d *videoDecoderMP4) decodeIlst(ilstStart int64, ilstSize uint64) {
 		}
 
 		atomTypeStr := atomType.String()
-		atomEnd := atomStart + int64(atomSize)
+		atomEnd := boxEnd(atomStart, atomSize)
 
 		if atomTypeStr == "----" {
 			// Freeform atom: mean + name + data sub-atoms.
@@ -64,7 +64,7 @@ func (d *videoDecoderMP4) decodeIlst(ilstStart int64, ilstSize uint64) {
 
 // decodeIlstAtomData parses the data sub-box of a standard ilst atom.
 func (d *videoDecoderMP4) decodeIlstAtomData(atomStart int64, atomSize uint64, tagName string) {
-	atomEnd := atomStart + int64(atomSize)
+	atomEnd := boxEnd(atomStart, atomSize)
 
 	for d.pos() < atomEnd {
 		dataStart := d.pos()
@@ -109,7 +109,7 @@ func (d *videoDecoderMP4) decodeIlstAtomData(atomStart int64, atomSize uint64, t
 			}
 		}
 
-		dataEnd := dataStart + int64(dataSize)
+		dataEnd := boxEnd(dataStart, dataSize)
 		if d.pos() < dataEnd {
 			d.skip(dataEnd - d.pos())
 		}
@@ -118,7 +118,7 @@ func (d *videoDecoderMP4) decodeIlstAtomData(atomStart int64, atomSize uint64, t
 
 // decodeFreeformAtom parses a freeform (----) atom with mean, name, and data sub-atoms.
 func (d *videoDecoderMP4) decodeFreeformAtom(atomStart int64, atomSize uint64) {
-	atomEnd := atomStart + int64(atomSize)
+	atomEnd := boxEnd(atomStart, atomSize)
 	var mean, name string
 
 	for d.pos() < atomEnd {
@@ -128,7 +128,7 @@ func (d *videoDecoderMP4) decodeFreeformAtom(atomStart int64, atomSize uint64) {
 			break
 		}
 
-		subEnd := subStart + int64(subSize)
+		subEnd := boxEnd(subStart, subSize)
 		subTypeStr := subType.String()
 
 		switch subTypeStr {
@@ -168,6 +168,8 @@ func (d *videoDecoderMP4) decodeFreeformAtom(atomStart int64, atomSize uint64) {
 }
 
 // decodeQTValue decodes a QuickTime data value based on its type indicator.
+// Apple stores integer values in padded big-endian slots (e.g., int8 in 8 bytes),
+// so we read the full valueLen as a big-endian integer for all integer types.
 func (d *videoDecoderMP4) decodeQTValue(typeIndicator uint32, valueLen int) any {
 	switch typeIndicator {
 	case qtDataTypeUTF8:
@@ -176,38 +178,16 @@ func (d *videoDecoderMP4) decodeQTValue(typeIndicator uint32, valueLen int) any 
 	case qtDataTypeUTF16BE:
 		data := d.readBytes(valueLen)
 		return decodeUTF16BE(data)
-	case qtDataTypeSInt8:
-		if valueLen >= 1 {
-			return int8(d.read1())
+	case qtDataTypeSInt8, qtDataTypeSInt16BE, qtDataTypeSInt32BE, qtDataTypeSInt64BE:
+		if valueLen < 1 {
+			return nil
 		}
-	case qtDataTypeUInt8:
-		if valueLen >= 1 {
-			return d.read1()
+		return int64(readBEIntN(d.readBytes(valueLen)))
+	case qtDataTypeUInt8, qtDataTypeUInt16BE, qtDataTypeUInt32BE, qtDataTypeUInt64BE:
+		if valueLen < 1 {
+			return nil
 		}
-	case qtDataTypeSInt16BE:
-		if valueLen >= 2 {
-			return int16(d.read2())
-		}
-	case qtDataTypeUInt16BE:
-		if valueLen >= 2 {
-			return d.read2()
-		}
-	case qtDataTypeSInt32BE:
-		if valueLen >= 4 {
-			return d.read4s()
-		}
-	case qtDataTypeUInt32BE:
-		if valueLen >= 4 {
-			return d.read4()
-		}
-	case qtDataTypeSInt64BE:
-		if valueLen >= 8 {
-			return int64(d.read8())
-		}
-	case qtDataTypeUInt64BE:
-		if valueLen >= 8 {
-			return d.read8()
-		}
+		return readBEUintN(d.readBytes(valueLen))
 	case qtDataTypeFloat32BE:
 		if valueLen >= 4 {
 			bits := d.read4()
@@ -225,6 +205,31 @@ func (d *videoDecoderMP4) decodeQTValue(typeIndicator uint32, valueLen int) any 
 		}
 	}
 	return nil
+}
+
+// readBEUintN reads up to 8 bytes as a big-endian unsigned integer.
+func readBEUintN(b []byte) uint64 {
+	var v uint64
+	for _, c := range b {
+		v = v<<8 | uint64(c)
+	}
+	return v
+}
+
+// readBEIntN reads up to 8 bytes as a big-endian signed integer (sign-extended).
+func readBEIntN(b []byte) int64 {
+	if len(b) == 0 {
+		return 0
+	}
+	// Sign-extend from the MSB.
+	var v int64
+	if b[0]&0x80 != 0 {
+		v = -1 // All ones for sign extension.
+	}
+	for _, c := range b {
+		v = v<<8 | int64(c)
+	}
+	return v
 }
 
 // cleanQTString removes nulls and control characters but preserves spaces.
