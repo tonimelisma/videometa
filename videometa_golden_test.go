@@ -255,6 +255,16 @@ func TestGoldenTruncated(t *testing.T) {
 }
 
 // Validates: REQ-NF-04
+func TestGoldenSonyA6700(t *testing.T) {
+	if _, err := os.Stat("testdata/sony_a6700.mp4"); os.IsNotExist(err) {
+		t.Skip("sony_a6700.mp4 not available")
+	}
+	c := qt.New(t)
+	testGoldenExhaustive(c, "testdata/sony_a6700.mp4", "testdata/sony_a6700.mp4.exiftool.json",
+		[]string{"QuickTime", "XML", "Composite"})
+}
+
+// Validates: REQ-NF-04
 func TestGoldenAppleMOV(t *testing.T) {
 	if _, err := os.Stat("testdata/apple.mov"); os.IsNotExist(err) {
 		t.Skip("apple.mov not available")

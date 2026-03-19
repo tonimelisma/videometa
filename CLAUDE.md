@@ -159,7 +159,15 @@ Work is done in increments. Do not ask permission, do not skip any step.
 
 1. Create a worktree using tool.
 2. Create a branch with the naming convention: `<type>/<task-name>` (e.g., `feat/isobmff-parser`). Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
-3. All changes go through PRs.
+3. **Copy gitignored test files into the worktree.** Large test videos (`apple.mov`, `sony_a6700.mp4`, etc.) are gitignored and won't appear in worktrees. Copy or symlink them from the main repo:
+   ```
+   for f in testdata/apple.mov testdata/sony_a6700.mp4; do
+     [ -f "/Users/tonimelisma/Development/videometa/$f" ] && \
+       cp "/Users/tonimelisma/Development/videometa/$f" "<worktree>/$f"
+   done
+   ```
+   **Never delete gitignored test files or their golden JSON. They are the user's data.**
+4. All changes go through PRs.
 
 ### Step 3: Develop with TDD
 
