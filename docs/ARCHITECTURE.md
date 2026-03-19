@@ -38,15 +38,14 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-FILE-04 | `metadecoder_exif.go` | EXIF IFD parser | REQ-EXIF-01..06 |
 | ARCH-FILE-05 | `metadecoder_exif_fields.go` | EXIF tag name table (~200 tags) | REQ-EXIF-04 |
 | ARCH-FILE-06 | `metadecoder_xmp.go` | XMP/RDF XML parser | REQ-XMP-* |
-| ARCH-FILE-07 | `metadecoder_iptc.go` | IPTC record parser | REQ-IPTC-* |
-| ARCH-FILE-08 | `metadecoder_iptc_fields.json` | IPTC field definitions (embedded) | REQ-IPTC-01 |
-| ARCH-FILE-09 | `metadecoder_quicktime.go` | QuickTime ilst/freeform parser, locale handling, tag name tables | REQ-QT-* |
-| ARCH-FILE-10 | `metadecoder_makernotes_pentax.go` | Pentax TAGS binary parser (MOV video MakerNotes) | REQ-EXIF-07 |
-| ARCH-FILE-11 | `metadecoder_sony_nrtm.go` | Sony NonRealTimeMeta XML parser (XAVC metadata) | REQ-QT-08 |
-| ARCH-FILE-14 | `helpers.go` | Rat[T], InvalidFormatError, value converters, ISO6709 parser | REQ-QT-06, REQ-NF-06 |
-| ARCH-FILE-15 | `gen/main.go` | Golden file generator (runs exiftool) | REQ-NF-04 |
-| ARCH-FILE-16 | `testdata/` | Test video files + golden JSON | REQ-TEST-* |
-| ARCH-FILE-17 | `.github/workflows/ci.yml` | CI with exiftool validation | REQ-NF-10 |
+| ARCH-FILE-07 | `metadecoder_iptc.go` | IPTC record parser + field definitions (inline) | REQ-IPTC-* |
+| ARCH-FILE-08 | `metadecoder_quicktime.go` | QuickTime ilst/freeform parser, locale handling, tag name tables | REQ-QT-* |
+| ARCH-FILE-09 | `metadecoder_makernotes_pentax.go` | Pentax TAGS binary parser + EXIF MakerNotes dispatch | REQ-EXIF-07..09 |
+| ARCH-FILE-10 | `metadecoder_sony_nrtm.go` | Sony NonRealTimeMeta XML parser (XAVC metadata) | REQ-QT-08 |
+| ARCH-FILE-11 | `helpers.go` | Rat[T], InvalidFormatError, value converters, ISO6709 parser | REQ-QT-06, REQ-NF-06 |
+| ARCH-FILE-12 | `gen/main.go` | Golden file generator (runs exiftool) | REQ-NF-04 |
+| ARCH-FILE-13 | `testdata/` | Test video files + golden JSON | REQ-TEST-* |
+| ARCH-FILE-14 | `.github/workflows/ci.yml` | CI with exiftool validation | REQ-NF-10 |
 
 ---
 

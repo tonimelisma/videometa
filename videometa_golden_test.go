@@ -196,21 +196,21 @@ func testGoldenExhaustive(c *qt.C, videoPath string, goldenPath string, groups [
 
 // --- Exhaustive golden tests ---
 
-// Validates: REQ-NF-04
+// Validates: REQ-NF-04, REQ-TEST-03
 func TestGoldenMinimalMP4(t *testing.T) {
 	c := qt.New(t)
 	testGoldenExhaustive(c, "testdata/minimal.mp4", "testdata/minimal.mp4.exiftool.json",
 		[]string{"QuickTime", "Composite"})
 }
 
-// Validates: REQ-NF-04, REQ-QT-07
+// Validates: REQ-NF-04, REQ-QT-07, REQ-TEST-01
 func TestGoldenWithGPS(t *testing.T) {
 	c := qt.New(t)
 	testGoldenExhaustive(c, "testdata/with_gps.mp4", "testdata/with_gps.mp4.exiftool.json",
 		[]string{"QuickTime", "Composite"})
 }
 
-// Validates: REQ-NF-04, REQ-QT-04
+// Validates: REQ-NF-04, REQ-QT-04, REQ-XMP-04
 func TestGoldenExifToolQuickTimeMOV(t *testing.T) {
 	c := qt.New(t)
 	testGoldenExhaustive(c, "testdata/exiftool_quicktime.mov", "testdata/exiftool_quicktime.mov.exiftool.json",
@@ -224,14 +224,14 @@ func TestGoldenWithAudio(t *testing.T) {
 		[]string{"QuickTime", "Composite"})
 }
 
-// Validates: REQ-NF-04, REQ-BOX-05
+// Validates: REQ-NF-04, REQ-BOX-05, REQ-TEST-05
 func TestGoldenNonfaststart(t *testing.T) {
 	c := qt.New(t)
 	testGoldenExhaustive(c, "testdata/nonfaststart.mp4", "testdata/nonfaststart.mp4.exiftool.json",
 		[]string{"QuickTime", "Composite"})
 }
 
-// Validates: REQ-NF-04, REQ-NF-06
+// Validates: REQ-NF-04, REQ-NF-06, REQ-TEST-04
 func TestGoldenTruncated(t *testing.T) {
 	c := qt.New(t)
 
@@ -254,7 +254,7 @@ func TestGoldenTruncated(t *testing.T) {
 	}
 }
 
-// Validates: REQ-NF-04
+// Validates: REQ-NF-04, REQ-TEST-09
 func TestGoldenSonyA6700(t *testing.T) {
 	if _, err := os.Stat("testdata/sony_a6700.mp4"); os.IsNotExist(err) {
 		t.Skip("sony_a6700.mp4 not available")
@@ -264,7 +264,7 @@ func TestGoldenSonyA6700(t *testing.T) {
 		[]string{"QuickTime", "XML", "Composite"})
 }
 
-// Validates: REQ-NF-04
+// Validates: REQ-NF-04, REQ-TEST-02
 func TestGoldenAppleMOV(t *testing.T) {
 	if _, err := os.Stat("testdata/apple.mov"); os.IsNotExist(err) {
 		t.Skip("apple.mov not available")
