@@ -75,6 +75,7 @@ func TestDecodePentaxTAGS(t *testing.T) {
 	c.Assert(tagMap["ISO"], qt.Equals, 50)
 }
 
+// Validates: REQ-NF-06
 func TestDecodePentaxTAGSTooShort(t *testing.T) {
 	c := qt.New(t)
 

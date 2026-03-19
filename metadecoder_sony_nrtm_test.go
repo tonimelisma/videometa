@@ -7,6 +7,7 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
+// Validates: REQ-NF-04
 func TestNrtmParseNumeric(t *testing.T) {
 	c := qt.New(t)
 
@@ -16,6 +17,7 @@ func TestNrtmParseNumeric(t *testing.T) {
 	c.Assert(nrtmParseNumeric("0"), qt.Equals, 0)
 }
 
+// Validates: REQ-NF-04
 func TestNrtmParseBool(t *testing.T) {
 	c := qt.New(t)
 
@@ -25,6 +27,7 @@ func TestNrtmParseBool(t *testing.T) {
 	c.Assert(nrtmParseBool("maybe"), qt.Equals, "maybe")
 }
 
+// Validates: REQ-NF-04
 func TestScanForXMLInMeta(t *testing.T) {
 	c := qt.New(t)
 
@@ -41,6 +44,7 @@ func TestScanForXMLInMeta(t *testing.T) {
 	c.Assert(scanForXMLInMeta([]byte{}), qt.IsNil)
 }
 
+// Validates: REQ-NF-04
 func TestDecodeSonyNRTM(t *testing.T) {
 	c := qt.New(t)
 
