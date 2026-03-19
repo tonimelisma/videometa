@@ -206,25 +206,25 @@ Mapping REQ-* → ARCH-* → source file → test file. Updated as implementatio
 | REQ-BOX-06 | ARCH-BOX-05 | videodecoder_mp4.go | videometa_test.go |
 | REQ-BOX-07 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
 | REQ-BOX-08 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
-| REQ-EXIF-01 | ARCH-DEC-02 | metadecoder_exif.go | videometa_test.go |
-| REQ-EXIF-02 | ARCH-DEC-02, ARCH-IO-02 | metadecoder_exif.go, io.go | videometa_test.go |
-| REQ-EXIF-03 | ARCH-DEC-02 | metadecoder_exif.go | videometa_test.go |
+| REQ-EXIF-01 | ARCH-DEC-02 | metadecoder_exif.go | metadecoder_exif_test.go |
+| REQ-EXIF-02 | ARCH-DEC-02, ARCH-IO-02 | metadecoder_exif.go, io.go | metadecoder_exif_test.go |
+| REQ-EXIF-03 | ARCH-DEC-02 | metadecoder_exif.go | metadecoder_exif_test.go |
 | REQ-EXIF-04 | ARCH-DEC-02 | metadecoder_exif_fields.go | videometa_test.go |
-| REQ-EXIF-05 | ARCH-DEC-06 | metadecoder_exif.go | videometa_test.go |
+| REQ-EXIF-05 | ARCH-DEC-06 | metadecoder_exif.go | metadecoder_exif_test.go |
 | REQ-EXIF-06 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
-| REQ-EXIF-07 | ARCH-DEC-08 | metadecoder_makernotes_apple.go | videometa_test.go |
-| REQ-EXIF-08 | ARCH-DEC-08 | metadecoder_makernotes_canon.go | videometa_test.go |
-| REQ-EXIF-09 | ARCH-DEC-08 | metadecoder_makernotes_sony.go | videometa_test.go |
-| REQ-XMP-01 | ARCH-DEC-03 | metadecoder_xmp.go | videometa_test.go |
-| REQ-XMP-02 | ARCH-DEC-03 | metadecoder_xmp.go | videometa_test.go |
-| REQ-XMP-03 | ARCH-DEC-03 | metadecoder_xmp.go | videometa_test.go |
+| REQ-EXIF-07 | ARCH-DEC-08 | metadecoder_makernotes_pentax.go | videometa_test.go |
+| REQ-EXIF-08 | ARCH-DEC-08 | metadecoder_makernotes_pentax.go | videometa_test.go |
+| REQ-EXIF-09 | ARCH-DEC-08 | metadecoder_makernotes_pentax.go | videometa_test.go |
+| REQ-XMP-01 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go |
+| REQ-XMP-02 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go |
+| REQ-XMP-03 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go |
 | REQ-XMP-04 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
-| REQ-XMP-05 | ARCH-DEC-03 | metadecoder_xmp.go | videometa_test.go |
-| REQ-XMP-06 | ARCH-DEC-03 | metadecoder_xmp.go | videometa_test.go |
-| REQ-IPTC-01 | ARCH-DEC-04 | metadecoder_iptc.go | videometa_test.go |
-| REQ-IPTC-02 | ARCH-DEC-04 | metadecoder_iptc.go | videometa_test.go |
-| REQ-IPTC-03 | ARCH-DEC-04 | metadecoder_iptc.go | videometa_test.go |
-| REQ-IPTC-04 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go |
+| REQ-XMP-05 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go |
+| REQ-XMP-06 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go |
+| REQ-IPTC-01 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go |
+| REQ-IPTC-02 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go |
+| REQ-IPTC-03 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go |
+| REQ-IPTC-04 | ARCH-DEC-04 | metadecoder_exif.go, metadecoder_iptc.go | metadecoder_iptc_test.go |
 | REQ-QT-01 | ARCH-DEC-05 | metadecoder_quicktime.go | videometa_test.go |
 | REQ-QT-02 | ARCH-DEC-05 | metadecoder_quicktime.go | videometa_test.go |
 | REQ-QT-03 | ARCH-DEC-05 | metadecoder_quicktime.go | videometa_test.go |

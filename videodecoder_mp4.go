@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"time"
 )
 
@@ -135,9 +136,18 @@ func (d *videoDecoderMP4) readBoxHeader() (totalSize uint64, boxType fourCC, isE
 	return totalSize, boxType, false
 }
 
+// boxEnd computes the end position of a box without overflowing int64.
+// When boxSize is the size=0 sentinel (1<<63 - 1), the result saturates at math.MaxInt64.
+func boxEnd(startPos int64, boxSize uint64) int64 {
+	if boxSize > uint64(math.MaxInt64-startPos) {
+		return math.MaxInt64
+	}
+	return startPos + int64(boxSize)
+}
+
 // seekToBoxEnd seeks past the end of a box.
 func (d *videoDecoderMP4) seekToBoxEnd(startPos int64, boxSize uint64) {
-	endPos := startPos + int64(boxSize)
+	endPos := boxEnd(startPos, boxSize)
 	currentPos := d.pos()
 	if currentPos < endPos {
 		d.skip(endPos - currentPos)
@@ -152,7 +162,7 @@ func (d *videoDecoderMP4) decodeFtyp(startPos int64, boxSize uint64) error {
 	brandStr := majorBrand.String()
 
 	// Read all compatible brands.
-	endPos := startPos + int64(boxSize)
+	endPos := boxEnd(startPos, boxSize)
 	var compatBrands []string
 	for d.pos() < endPos {
 		compat := d.readFourCC()
@@ -196,7 +206,7 @@ func (d *videoDecoderMP4) decodeFtyp(startPos int64, boxSize uint64) error {
 
 // decodeMoov iterates the moov container's child boxes.
 func (d *videoDecoderMP4) decodeMoov(moovStart int64, moovSize uint64) error {
-	moovEnd := moovStart + int64(moovSize)
+	moovEnd := boxEnd(moovStart, moovSize)
 	for d.pos() < moovEnd {
 		startPos := d.pos()
 		boxSize, boxType, isEOF := d.readBoxHeader()
@@ -285,7 +295,7 @@ func (d *videoDecoderMP4) decodeTrak(trakStart int64, trakSize uint64) {
 	// Reset per-track state so audio/video detection starts fresh.
 	d.currentHandlerType = ""
 
-	trakEnd := trakStart + int64(trakSize)
+	trakEnd := boxEnd(trakStart, trakSize)
 	for d.pos() < trakEnd {
 		startPos := d.pos()
 		boxSize, boxType, isEOF := d.readBoxHeader()
@@ -391,7 +401,7 @@ func (d *videoDecoderMP4) decodeTkhd() {
 // decodeTapt parses the track aperture mode dimensions container box (QuickTime-specific).
 // Contains clef, prof, and enof children for clean, production, and encoded dimensions.
 func (d *videoDecoderMP4) decodeTapt(taptStart int64, taptSize uint64) {
-	taptEnd := taptStart + int64(taptSize)
+	taptEnd := boxEnd(taptStart, taptSize)
 	for d.pos() < taptEnd {
 		startPos := d.pos()
 		boxSize, boxType, isEOF := d.readBoxHeader()
@@ -430,7 +440,7 @@ func (d *videoDecoderMP4) decodeTaptDimension(tagName string) {
 
 // decodeMdia iterates the media container box.
 func (d *videoDecoderMP4) decodeMdia(mdiaStart int64, mdiaSize uint64) {
-	mdiaEnd := mdiaStart + int64(mdiaSize)
+	mdiaEnd := boxEnd(mdiaStart, mdiaSize)
 	for d.pos() < mdiaEnd {
 		startPos := d.pos()
 		boxSize, boxType, isEOF := d.readBoxHeader()
@@ -510,11 +520,12 @@ func (d *videoDecoderMP4) decodeHdlr(hdlrStart int64, hdlrSize uint64) {
 		d.currentHandlerType = ht
 	}
 
-	// Read manufacturer/vendor (12 bytes = 3 x uint32 reserved).
-	_ = d.readBytes(12)
+	// Read vendor ID (first 4 bytes of reserved) + remaining reserved (8 bytes).
+	vendorID := d.readFourCC()
+	_ = d.readBytes(8)
 
 	// Read handler description — rest of box is a null-terminated string.
-	endPos := hdlrStart + int64(hdlrSize)
+	endPos := boxEnd(hdlrStart, hdlrSize)
 	nameLen := endPos - d.pos()
 	var description string
 	if nameLen > 0 && nameLen < 256 {
@@ -528,6 +539,9 @@ func (d *videoDecoderMP4) decodeHdlr(hdlrStart int64, hdlrSize uint64) {
 			d.emitQuickTimeTag("HandlerClass", hc)
 		}
 		d.emitQuickTimeTag("HandlerType", handlerType.String())
+		if isASCIIFourCC(vendorID) {
+			d.emitQuickTimeTag("HandlerVendorID", vendorID.String())
+		}
 		if description != "" {
 			d.emitQuickTimeTag("HandlerDescription", description)
 		}
@@ -536,7 +550,7 @@ func (d *videoDecoderMP4) decodeHdlr(hdlrStart int64, hdlrSize uint64) {
 
 // decodeMinf iterates the media information box.
 func (d *videoDecoderMP4) decodeMinf(minfStart int64, minfSize uint64) {
-	minfEnd := minfStart + int64(minfSize)
+	minfEnd := boxEnd(minfStart, minfSize)
 	for d.pos() < minfEnd {
 		startPos := d.pos()
 		boxSize, boxType, isEOF := d.readBoxHeader()
@@ -589,7 +603,7 @@ func (d *videoDecoderMP4) decodeSmhd() {
 
 // decodeStbl iterates the sample table box.
 func (d *videoDecoderMP4) decodeStbl(stblStart int64, stblSize uint64) {
-	stblEnd := stblStart + int64(stblSize)
+	stblEnd := boxEnd(stblStart, stblSize)
 	for d.pos() < stblEnd {
 		startPos := d.pos()
 		boxSize, boxType, isEOF := d.readBoxHeader()
@@ -735,7 +749,7 @@ func (d *videoDecoderMP4) decodeVisualSampleEntry(entryStart int64, entrySize ui
 	}
 
 	// Parse sub-boxes within the sample entry (pasp, btrt, etc.).
-	entryEnd := entryStart + int64(entrySize)
+	entryEnd := boxEnd(entryStart, uint64(entrySize))
 	for d.pos()+8 <= entryEnd {
 		subStart := d.pos()
 		subSize, subType, isEOF := d.readBoxHeader()
@@ -787,7 +801,7 @@ func (d *videoDecoderMP4) decodeAudioSampleEntry(entryStart int64, entrySize uin
 	}
 
 	// Parse sub-boxes (wave, esds, etc.) within the audio sample entry.
-	entryEnd := entryStart + int64(entrySize)
+	entryEnd := boxEnd(entryStart, uint64(entrySize))
 	for d.pos()+8 <= entryEnd {
 		subStart := d.pos()
 		subSize, subType, isEOF := d.readBoxHeader()
@@ -804,7 +818,7 @@ func (d *videoDecoderMP4) decodeAudioSampleEntry(entryStart int64, entrySize uin
 // decodeWave parses the wave (sound data format) box inside audio sample entries.
 // Extracts PurchaseFileFormat from the frma (original format) sub-box.
 func (d *videoDecoderMP4) decodeWave(waveStart int64, waveSize uint64) {
-	waveEnd := waveStart + int64(waveSize)
+	waveEnd := boxEnd(waveStart, waveSize)
 	for d.pos()+8 <= waveEnd {
 		subStart := d.pos()
 		subSize, subType, isEOF := d.readBoxHeader()
@@ -846,7 +860,7 @@ func (d *videoDecoderMP4) decodeBtrt() {
 // Handles meta containers, old-style QuickTime text atoms (©xxx), XMP_ boxes,
 // Pentax TAGS atoms, and UUID boxes.
 func (d *videoDecoderMP4) decodeUdta(udtaStart int64, udtaSize uint64) {
-	udtaEnd := udtaStart + int64(udtaSize)
+	udtaEnd := boxEnd(udtaStart, udtaSize)
 	for d.pos() < udtaEnd {
 		startPos := d.pos()
 		boxSize, boxType, isEOF := d.readBoxHeader()
@@ -923,7 +937,7 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
 		_ = d.readBytes(4)
 	}
 
-	metaEnd := metaStart + int64(metaSize)
+	metaEnd := boxEnd(metaStart, metaSize)
 
 	// Track the handler type and keys for mdta-style metadata.
 	var handlerType string
@@ -991,7 +1005,7 @@ func (d *videoDecoderMP4) decodeMetaHdlrReturn(hdlrStart int64, hdlrSize uint64)
 	_ = d.readBytes(8) // remaining reserved
 
 	// Read handler description (name) — rest of box is a null-terminated string.
-	endPos := hdlrStart + int64(hdlrSize)
+	endPos := boxEnd(hdlrStart, hdlrSize)
 	nameLen := endPos - d.pos()
 	var description string
 	if nameLen > 0 && nameLen < 256 {
@@ -1040,14 +1054,14 @@ func (d *videoDecoderMP4) decodeKeysBox(keysStart int64, keysSize uint64) []stri
 
 // decodeIlstMdta parses an ilst box where entries reference a keys table by 1-based index.
 func (d *videoDecoderMP4) decodeIlstMdta(ilstStart int64, ilstSize uint64, keys []string) {
-	ilstEnd := ilstStart + int64(ilstSize)
+	ilstEnd := boxEnd(ilstStart, ilstSize)
 	for d.pos() < ilstEnd {
 		atomStart := d.pos()
 		atomSize, atomType, isEOF := d.readBoxHeader()
 		if isEOF {
 			break
 		}
-		atomEnd := atomStart + int64(atomSize)
+		atomEnd := boxEnd(atomStart, atomSize)
 
 		// The atom type is a big-endian uint32 index into the keys table.
 		keyIndex := uint32(atomType[0])<<24 | uint32(atomType[1])<<16 | uint32(atomType[2])<<8 | uint32(atomType[3])
@@ -1392,7 +1406,7 @@ func (d *videoDecoderMP4) decodeMTDT(payloadLen int) {
 
 // decodeTref iterates the track reference box, handling cdsc (content describes).
 func (d *videoDecoderMP4) decodeTref(trefStart int64, trefSize uint64) {
-	trefEnd := trefStart + int64(trefSize)
+	trefEnd := boxEnd(trefStart, trefSize)
 	for d.pos() < trefEnd {
 		subStart := d.pos()
 		subSize, subType, isEOF := d.readBoxHeader()
@@ -1414,7 +1428,7 @@ func (d *videoDecoderMP4) decodeTref(trefStart int64, trefSize uint64) {
 
 // decodeGmhd parses the generic media header container (QuickTime-specific).
 func (d *videoDecoderMP4) decodeGmhd(gmhdStart int64, gmhdSize uint64) {
-	gmhdEnd := gmhdStart + int64(gmhdSize)
+	gmhdEnd := boxEnd(gmhdStart, gmhdSize)
 	for d.pos() < gmhdEnd {
 		subStart := d.pos()
 		subSize, subType, isEOF := d.readBoxHeader()

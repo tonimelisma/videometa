@@ -40,6 +40,77 @@ func buildMP4WithInvalidEXIF() []byte {
 	return buf.Bytes()
 }
 
+// buildEXIFWithMakerNotes creates an EXIF/TIFF structure with a MakerNotes tag (0x927C).
+func buildEXIFWithMakerNotes(makerNotesData []byte) []byte {
+	buf := make([]byte, 256)
+	off := 0
+	bo := binary.BigEndian
+
+	put16 := func(v uint16) { bo.PutUint16(buf[off:], v); off += 2 }
+	put32 := func(v uint32) { bo.PutUint32(buf[off:], v); off += 4 }
+
+	// TIFF header: MM + 0x002A + IFD0 offset.
+	buf[0], buf[1] = 'M', 'M'
+	off = 2
+	put16(0x002A)
+	put32(8) // IFD0 at offset 8
+
+	// IFD0: 1 tag.
+	put16(1)
+
+	// Tag: MakerNotes (0x927C), UNDEFINED, count=len(data), offset→data.
+	put16(0x927C)
+	put16(exifTypeUndef)
+	put32(uint32(len(makerNotesData)))
+	dataOff := 8 + 2 + 12 + 4 // IFD start + count(2) + 1 tag(12) + nextIFD(4)
+	put32(uint32(dataOff))
+
+	// Next IFD = 0.
+	put32(0)
+
+	// MakerNotes data.
+	copy(buf[off:], makerNotesData)
+	off += len(makerNotesData)
+
+	return buf[:off]
+}
+
+// buildEXIFWithIPTC creates an EXIF/TIFF structure with ApplicationNotes tag (0x83BB)
+// containing IPTC data.
+func buildEXIFWithIPTC(iptcData []byte) []byte {
+	buf := make([]byte, 512)
+	off := 0
+	bo := binary.BigEndian
+
+	put16 := func(v uint16) { bo.PutUint16(buf[off:], v); off += 2 }
+	put32 := func(v uint32) { bo.PutUint32(buf[off:], v); off += 4 }
+
+	// TIFF header.
+	buf[0], buf[1] = 'M', 'M'
+	off = 2
+	put16(0x002A)
+	put32(8) // IFD0 at offset 8
+
+	// IFD0: 1 tag.
+	put16(1)
+
+	// Tag: ApplicationNotes (0x83BB), UNDEFINED, count=len(iptcData), offset→data.
+	put16(0x83BB)
+	put16(exifTypeUndef)
+	put32(uint32(len(iptcData)))
+	dataOff := 8 + 2 + 12 + 4
+	put32(uint32(dataOff))
+
+	// Next IFD = 0.
+	put32(0)
+
+	// IPTC data.
+	copy(buf[off:], iptcData)
+	off += len(iptcData)
+
+	return buf[:off]
+}
+
 // slowReader wraps an io.ReadSeeker and adds delay to each Read call.
 type slowReader struct {
 	rs    io.ReadSeeker

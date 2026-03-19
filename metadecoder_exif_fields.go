@@ -35,6 +35,7 @@ var exifFields = map[uint16]string{
 	0x0213: "YCbCrPositioning",
 	0x0214: "ReferenceBlackWhite",
 	0x02BC: "ApplicationNotes",
+	0x83BB: "IPTC-NAA",
 	0x8298: "Copyright",
 	0x8769: "ExifOffset",
 	0x8825: "GPSInfo",
