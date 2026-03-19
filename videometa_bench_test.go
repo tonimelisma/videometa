@@ -4,6 +4,9 @@ import (
 	"io"
 	"os"
 	"testing"
+	"time"
+
+	qt "github.com/frankban/quicktest"
 )
 
 // Validates: REQ-NF-02, REQ-NF-03
@@ -150,4 +153,26 @@ func (b *bytesReadSeeker) Seek(offset int64, whence int) (int64, error) {
 		b.pos = 0
 	}
 	return int64(b.pos), nil
+}
+
+// Validates: REQ-NF-02
+func TestDecodeLatencyTarget(t *testing.T) {
+	c := qt.New(t)
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	start := time.Now()
+	_, err = Decode(Options{
+		R:       f,
+		Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
+		HandleTag: func(ti TagInfo) error {
+			return nil
+		},
+	})
+	elapsed := time.Since(start)
+	c.Assert(err, qt.IsNil)
+	// REQ-NF-02: < 500μs target. Use 2ms ceiling for CI variability.
+	c.Assert(elapsed < 2*time.Millisecond, qt.IsTrue,
+		qt.Commentf("decode took %v, expected < 2ms", elapsed))
 }

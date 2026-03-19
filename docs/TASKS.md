@@ -18,6 +18,7 @@ Tasks organized by milestone. Each task traces to requirements (`REQ-*`) and arc
 | M10: Documentation + Release | ✅ Complete |
 | M11: Extended Test Coverage | ✅ Complete |
 | M12: Implement Skipped Tests | ✅ Complete |
+| M13: Fix Weak Tests | ✅ Complete |
 
 ---
 
@@ -87,6 +88,23 @@ Every previously-skipped test implemented. No remaining `t.Skip` except conditio
 | TASK-M12-08 | TestDecodeIPTCViaApplicationNotes (REQ-IPTC-04) | ✅ Complete | metadecoder_iptc_test.go, metadecoder_exif_fields.go |
 | TASK-M12-09 | TestDecodeXMPExtendedSkip (REQ-XMP-05) | ✅ Complete | metadecoder_xmp_test.go |
 | TASK-M12-10 | TestDecodeMakerNotesRouting (REQ-EXIF-07/08/09) | ✅ Complete | videometa_test.go, testhelpers_test.go |
+
+---
+
+## Milestone 13: Fix Weak Tests
+
+Comprehensive test audit: strengthen all non-specific assertions, fix fuzz error typing, add latency target test.
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M13-P1 | Fix `isInvalidFormatErrorCandidate` to match "allocation too large" errors | ✅ Complete | helpers.go |
+| TASK-M13-01 | Fuzz tests assert `IsInvalidFormat` on malformed input errors | ✅ Complete | videometa_fuzz_test.go |
+| TASK-M13-02 | Add `TestDecodeLatencyTarget` (REQ-NF-02, < 2ms ceiling) | ✅ Complete | videometa_bench_test.go |
+| TASK-M13-03 | TestWarnfCallback asserts specific "invalid byte order marker" warning | ✅ Complete | videometa_test.go |
+| TASK-M13-04 | TestBestEffortPartial asserts full decode success (not either/or) | ✅ Complete | videometa_test.go |
+| TASK-M13-05 | TestDecodeMakerNotesRouting asserts warning content + no MAKERNOTES tags | ✅ Complete | videometa_test.go |
+| TASK-M13-06 | TestBoxSkipUnknown asserts no error + ftyp tag emitted | ✅ Complete | videometa_test.go |
+| TASK-M13-07 | TestLimitTagSize three-tier test proving exact > mechanism | ✅ Complete | videometa_test.go |
 
 ---
 
