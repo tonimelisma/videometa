@@ -193,8 +193,8 @@ func (d *videoDecoderMP4) decodeFtyp(startPos int64, boxSize uint64) error {
 	// Emit ftyp tags after validation succeeds.
 	if d.opts.Sources.Has(QUICKTIME) {
 		d.emitQuickTimeTag("MajorBrand", brandStr)
-		// MinorVersion: exiftool formats as val/65536 . (val/256)%256 . val%256.
-		d.emitQuickTimeTag("MinorVersion", fmt.Sprintf("%d.%d.%d",
+		// MinorVersion: exiftool formats as hex dotted notation.
+		d.emitQuickTimeTag("MinorVersion", fmt.Sprintf("%x.%x.%x",
 			minorVersion>>16, (minorVersion>>8)&0xFF, minorVersion&0xFF))
 		if len(compatBrands) > 0 {
 			d.emitQuickTimeTag("CompatibleBrands", compatBrands)
