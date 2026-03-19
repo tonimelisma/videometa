@@ -6,6 +6,7 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
+// Validates: REQ-QT-01
 func TestDecodeUTF16BE(t *testing.T) {
 	c := qt.New(t)
 
@@ -28,6 +29,7 @@ func TestDecodeUTF16BE(t *testing.T) {
 	}
 }
 
+// Validates: REQ-QT-01
 func TestDecodeLocale(t *testing.T) {
 	c := qt.New(t)
 
@@ -50,6 +52,7 @@ func TestDecodeLocale(t *testing.T) {
 	}
 }
 
+// Validates: REQ-QT-02, REQ-QT-03
 func TestFreeformToTagName(t *testing.T) {
 	c := qt.New(t)
 

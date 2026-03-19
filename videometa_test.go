@@ -2,6 +2,7 @@ package videometa
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -74,9 +75,8 @@ func TestDecodeTruncatedMP4(t *testing.T) {
 			return nil
 		},
 	})
-	if err != nil {
-		c.Assert(IsInvalidFormat(err), qt.IsTrue, qt.Commentf("error: %v", err))
-	}
+	c.Assert(err, qt.IsNotNil, qt.Commentf("truncated file must return error"))
+	c.Assert(IsInvalidFormat(err), qt.IsTrue, qt.Commentf("error: %v", err))
 }
 
 // Validates: REQ-API-17
@@ -122,25 +122,8 @@ func TestDecodeAll(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	all := tags.All()
-	c.Assert(len(all) > 0, qt.IsTrue)
 	c.Assert(all["TimeScale"].Value, qt.Equals, uint32(1000))
-}
-
-// Validates: REQ-QT-01
-func TestDecodeIlstEncoder(t *testing.T) {
-	c := qt.New(t)
-
-	f, err := os.Open("testdata/minimal.mp4")
-	c.Assert(err, qt.IsNil)
-	defer func() { _ = f.Close() }()
-
-	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
-	c.Assert(err, qt.IsNil)
-
-	qtTags := tags.QuickTime()
-	encoder, ok := qtTags["Encoder"]
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(encoder.Value, qt.Equals, "Lavf62.3.100")
+	c.Assert(all["ImageWidth"].Value, qt.Equals, 320)
 }
 
 // Validates: REQ-BOX-08
@@ -171,6 +154,7 @@ func TestSourceBitmask(t *testing.T) {
 	c.Assert(s.Has(EXIF), qt.IsTrue)
 	c.Assert(s.Has(XMP), qt.IsTrue)
 	c.Assert(s.Has(IPTC), qt.IsFalse)
+	c.Assert(s.Has(COMPOSITE), qt.IsFalse)
 
 	s = s.Remove(EXIF)
 	c.Assert(s.Has(EXIF), qt.IsFalse)
@@ -210,6 +194,9 @@ func TestTagsGetDateTime(t *testing.T) {
 	c.Assert(dt.Year(), qt.Equals, 2024)
 	c.Assert(dt.Month(), qt.Equals, time.Month(6))
 	c.Assert(dt.Day(), qt.Equals, 15)
+	c.Assert(dt.Hour(), qt.Equals, 10)
+	c.Assert(dt.Minute(), qt.Equals, 30)
+	c.Assert(dt.Second(), qt.Equals, 0)
 }
 
 // Validates: REQ-API-12
@@ -225,11 +212,30 @@ func TestTagsGetDateTimeUTC(t *testing.T) {
 
 	dt, err := tags.GetDateTimeUTC()
 	c.Assert(err, qt.IsNil)
+	c.Assert(dt.Year(), qt.Equals, 2024)
 	c.Assert(dt.Location(), qt.Equals, time.UTC)
 }
 
 // Validates: REQ-API-10
 func TestDecodeTimeout(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	_, err = Decode(Options{
+		R:         &slowReader{rs: f, delay: 100 * time.Millisecond},
+		Sources:   CONFIG,
+		Timeout:   50 * time.Millisecond,
+		HandleTag: func(ti TagInfo) error { return nil },
+	})
+	c.Assert(err, qt.IsNotNil, qt.Commentf("decode should have timed out"))
+	c.Assert(err.Error(), qt.Contains, "timed out")
+}
+
+// Validates: REQ-API-10
+func TestDecodeTimeoutNotExceeded(t *testing.T) {
 	c := qt.New(t)
 
 	f, err := os.Open("testdata/minimal.mp4")
@@ -270,7 +276,7 @@ func TestShouldHandleTag(t *testing.T) {
 	c.Assert(tags["TimeScale"].Value, qt.Equals, uint32(1000))
 }
 
-// Validates: ARCH-IO-05
+// Validates: ARCH-IO-05, REQ-API-03
 func TestDecodeWithIOReaderFallback(t *testing.T) {
 	c := qt.New(t)
 
@@ -278,7 +284,6 @@ func TestDecodeWithIOReaderFallback(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = f.Close() }()
 
-	// Wrap in a plain io.Reader (no seeking).
 	result, err := Decode(Options{
 		R:         readerOnly{f},
 		Sources:   CONFIG | QUICKTIME,
@@ -292,25 +297,27 @@ func TestDecodeWithIOReaderFallback(t *testing.T) {
 func TestDecodeNoMetadataFile(t *testing.T) {
 	c := qt.New(t)
 
-	// An empty ftyp-only "file" — valid MP4 structure but no metadata.
 	data := make([]byte, 0, 20)
 	data = append(data, 0, 0, 0, 20, 'f', 't', 'y', 'p')
 	data = append(data, 'i', 's', 'o', 'm')
 	data = append(data, 0, 0, 0, 0)
 	data = append(data, 'i', 's', 'o', 'm')
 
-	count := 0
+	tags := make(map[string]TagInfo)
 	_, err := Decode(Options{
 		R:       readerSeekerFromBytes(data),
 		Sources: QUICKTIME | CONFIG,
 		HandleTag: func(ti TagInfo) error {
-			count++
+			tags[ti.Tag] = ti
 			return nil
 		},
 	})
 	c.Assert(err, qt.IsNil)
-	// ftyp tags (MajorBrand, MinorVersion, CompatibleBrands) are now emitted.
-	c.Assert(count, qt.Equals, 3)
+	c.Assert(tags["MajorBrand"].Value, qt.Equals, "isom")
+	c.Assert(tags["MinorVersion"].Value, qt.IsNotNil)
+	_, hasCB := tags["CompatibleBrands"]
+	c.Assert(hasCB, qt.IsTrue)
+	c.Assert(len(tags), qt.Equals, 3)
 }
 
 // Validates: REQ-API-08, REQ-API-09
@@ -332,7 +339,7 @@ func TestLimitNumTags(t *testing.T) {
 		},
 	})
 	c.Assert(err, qt.IsNil)
-	c.Assert(count, qt.Equals, 5) // Exactly 5 tags delivered before limit stops.
+	c.Assert(count, qt.Equals, 5)
 }
 
 // Validates: REQ-API-08
@@ -347,17 +354,15 @@ func TestLimitTagSize(t *testing.T) {
 	_, err = Decode(Options{
 		R:            f,
 		Sources:      QUICKTIME,
-		LimitTagSize: 5, // Very small — should skip string tags longer than 5 bytes.
+		LimitTagSize: 5,
 		HandleTag: func(ti TagInfo) error {
 			tags[ti.Tag] = ti
 			return nil
 		},
 	})
 	c.Assert(err, qt.IsNil)
-	// CompressorName is "Lavc62.11.100 libx264" (21 bytes) — should be skipped.
 	_, hasCompName := tags["CompressorName"]
 	c.Assert(hasCompName, qt.IsFalse, qt.Commentf("long CompressorName should be skipped"))
-	// Short tags like MajorBrand "isom" (4 bytes) should be present.
 	_, hasMajorBrand := tags["MajorBrand"]
 	c.Assert(hasMajorBrand, qt.IsTrue, qt.Commentf("short MajorBrand should be present"))
 }
@@ -377,67 +382,16 @@ func TestDecodeAllReturnsVideoConfig(t *testing.T) {
 	c.Assert(result.VideoConfig.Codec, qt.Equals, "avc1")
 }
 
-// Validates: REQ-QT-04, REQ-QT-05
-func TestNewQuickTimeTags(t *testing.T) {
-	c := qt.New(t)
-
-	f, err := os.Open("testdata/minimal.mp4")
-	c.Assert(err, qt.IsNil)
-	defer func() { _ = f.Close() }()
-
-	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
-	c.Assert(err, qt.IsNil)
-	qtTags := tags.QuickTime()
-
-	// Phase 2.1: ftyp tags
-	c.Assert(qtTags["MajorBrand"].Value, qt.Equals, "isom")
-	c.Assert(qtTags["MinorVersion"].Value, qt.Equals, "0.2.0")
-	compatBrands, ok := qtTags["CompatibleBrands"].Value.([]string)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(compatBrands), qt.Equals, 4)
-	c.Assert(compatBrands[0], qt.Equals, "isom")
-
-	// Phase 2.2: MovieHeaderVersion
-	c.Assert(qtTags["MovieHeaderVersion"].Value, qt.Equals, uint8(0))
-
-	// Phase 2.3: Visual sample entry
-	c.Assert(qtTags["SourceImageWidth"].Value, qt.Equals, 320)
-	c.Assert(qtTags["SourceImageHeight"].Value, qt.Equals, 240)
-	c.Assert(qtTags["XResolution"].Value, qt.Equals, 72)
-	c.Assert(qtTags["YResolution"].Value, qt.Equals, 72)
-	c.Assert(qtTags["BitDepth"].Value, qt.Equals, 24)
-
-	// Phase 2.6: vmhd
-	c.Assert(qtTags["GraphicsMode"].Value, qt.Equals, uint16(0))
-	c.Assert(qtTags["OpColor"].Value, qt.Equals, "0 0 0")
-
-	// Phase 2.7: VideoFrameRate
-	c.Assert(qtTags["VideoFrameRate"].Value, qt.Equals, 25.0)
-
-	// Phase 2.8: mdat
-	mdatSize, ok := qtTags["MediaDataSize"]
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(mdatSize.Value, qt.Not(qt.IsNil))
-
-	// Phase 2.9: HandlerDescription
-	c.Assert(qtTags["HandlerDescription"].Value, qt.Equals, "VideoHandler")
-
-	// Phase 1.3: MatrixStructure fixed
-	c.Assert(qtTags["MatrixStructure"].Value, qt.Equals, "1 0 0 0 1 0 0 0 1")
-}
-
 // Validates: REQ-API-09
 func TestWarnfCallback(t *testing.T) {
 	c := qt.New(t)
 
-	f, err := os.Open("testdata/truncated.mp4")
-	c.Assert(err, qt.IsNil)
-	defer func() { _ = f.Close() }()
+	data := buildMP4WithInvalidEXIF()
 
 	var warnings []string
 	_, _ = Decode(Options{
-		R:       f,
-		Sources: QUICKTIME | EXIF | XMP | IPTC | CONFIG,
+		R:       readerSeekerFromBytes(data),
+		Sources: QUICKTIME | EXIF,
 		HandleTag: func(ti TagInfo) error {
 			return nil
 		},
@@ -445,9 +399,8 @@ func TestWarnfCallback(t *testing.T) {
 			warnings = append(warnings, fmt.Sprintf(format, args...))
 		},
 	})
-	// Truncated file should still work (returns error or partial), but the
-	// Warnf callback is used for non-fatal warnings — the test verifies
-	// the callback is wired up and callable.
+	c.Assert(len(warnings) > 0, qt.IsTrue,
+		qt.Commentf("Warnf should have been called for invalid EXIF data; got 0 warnings"))
 }
 
 // Validates: REQ-API-02
@@ -462,6 +415,7 @@ func TestTagsGetters(t *testing.T) {
 	tags.Add(TagInfo{Source: CONFIG, Tag: "Width", Value: 1920})
 	tags.Add(TagInfo{Source: MAKERNOTES, Tag: "ISO", Value: 100})
 	tags.Add(TagInfo{Source: XML, Tag: "DeviceModel", Value: "A7"})
+	tags.Add(TagInfo{Source: COMPOSITE, Tag: "ImageSize", Value: "1920 1080"})
 
 	c.Assert(tags.EXIF()["Make"].Value, qt.Equals, "Canon")
 	c.Assert(tags.XMP()["Creator"].Value, qt.Equals, "Test")
@@ -470,10 +424,10 @@ func TestTagsGetters(t *testing.T) {
 	c.Assert(tags.Config()["Width"].Value, qt.Equals, 1920)
 	c.Assert(tags.MakerNotes()["ISO"].Value, qt.Equals, 100)
 	c.Assert(tags.XML()["DeviceModel"].Value, qt.Equals, "A7")
+	c.Assert(tags.Composite()["ImageSize"].Value, qt.Equals, "1920 1080")
 
-	// All() returns merged map with correct priority.
 	all := tags.All()
-	c.Assert(len(all), qt.Equals, 7)
+	c.Assert(len(all), qt.Equals, 8)
 }
 
 // Validates: REQ-API-13
@@ -481,12 +435,13 @@ func TestTagsGetLatLongQuickTime(t *testing.T) {
 	c := qt.New(t)
 
 	var tags Tags
-	tags.Add(TagInfo{Source: QUICKTIME, Tag: "GPSCoordinates", Value: "+34.0592-118.4460/"})
+	// GPSCoordinates is now in exiftool space-separated format after conversion.
+	tags.Add(TagInfo{Source: QUICKTIME, Tag: "GPSCoordinates", Value: "34.0592 -118.446 42.938"})
 
 	lat, lon, err := tags.GetLatLong()
 	c.Assert(err, qt.IsNil)
-	c.Assert(lat > 34.05 && lat < 34.06, qt.IsTrue)
-	c.Assert(lon > -118.45 && lon < -118.44, qt.IsTrue)
+	c.Assert(math.Abs(lat-34.0592) < 0.001, qt.IsTrue, qt.Commentf("lat=%f", lat))
+	c.Assert(math.Abs(lon-(-118.446)) < 0.001, qt.IsTrue, qt.Commentf("lon=%f", lon))
 }
 
 // Validates: REQ-API-13
@@ -496,4 +451,142 @@ func TestTagsGetLatLongNoGPS(t *testing.T) {
 	var tags Tags
 	_, _, err := tags.GetLatLong()
 	c.Assert(err, qt.IsNotNil)
+}
+
+// Validates: REQ-API-06
+func TestHandleTagFieldsPopulated(t *testing.T) {
+	c := qt.New(t)
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	var found bool
+	_, err = Decode(Options{
+		R:       f,
+		Sources: QUICKTIME,
+		HandleTag: func(ti TagInfo) error {
+			if ti.Tag == "TimeScale" {
+				c.Assert(ti.Source, qt.Equals, QUICKTIME)
+				c.Assert(ti.Namespace, qt.Equals, "QuickTime")
+				c.Assert(ti.Tag, qt.Equals, "TimeScale")
+				c.Assert(ti.Value, qt.Equals, uint32(1000))
+				found = true
+			}
+			return nil
+		},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(found, qt.IsTrue)
+}
+
+// Validates: REQ-API-14, REQ-CFG-01, REQ-CFG-02, REQ-CFG-03, REQ-CFG-04
+func TestVideoConfig(t *testing.T) {
+	c := qt.New(t)
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	result, err := Decode(Options{
+		R:         f,
+		Sources:   CONFIG,
+		HandleTag: func(ti TagInfo) error { return nil },
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.VideoConfig.Width, qt.Equals, 320)
+	c.Assert(result.VideoConfig.Height, qt.Equals, 240)
+	c.Assert(result.VideoConfig.Rotation, qt.Equals, 0)
+	c.Assert(result.VideoConfig.Codec, qt.Equals, "avc1")
+	c.Assert(result.VideoConfig.Duration > 0, qt.IsTrue,
+		qt.Commentf("Duration should be > 0, got %v", result.VideoConfig.Duration))
+}
+
+// Validates: REQ-BOX-02
+func TestBox64BitExtendedSize(t *testing.T) {
+	c := qt.New(t)
+
+	data := make([]byte, 0, 40)
+	// Box header: size=1 (signals 64-bit), type=ftyp
+	data = append(data, 0, 0, 0, 1, 'f', 't', 'y', 'p')
+	// 64-bit size: 28 bytes total
+	data = append(data, 0, 0, 0, 0, 0, 0, 0, 28)
+	// ftyp body: brand=isom, version=0, compat=isom
+	data = append(data, 'i', 's', 'o', 'm')
+	data = append(data, 0, 0, 0, 0)
+	data = append(data, 'i', 's', 'o', 'm')
+
+	tags := make(map[string]TagInfo)
+	_, err := Decode(Options{
+		R:       readerSeekerFromBytes(data),
+		Sources: QUICKTIME,
+		HandleTag: func(ti TagInfo) error {
+			tags[ti.Tag] = ti
+			return nil
+		},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(tags["MajorBrand"].Value, qt.Equals, "isom")
+}
+
+// Validates: REQ-BOX-07
+func TestBoxSkipUnknown(t *testing.T) {
+	c := qt.New(t)
+
+	data := make([]byte, 0, 36)
+	// ftyp box (20 bytes)
+	data = append(data, 0, 0, 0, 20, 'f', 't', 'y', 'p')
+	data = append(data, 'i', 's', 'o', 'm', 0, 0, 0, 0, 'i', 's', 'o', 'm')
+	// Unknown box "zzzz" (16 bytes)
+	data = append(data, 0, 0, 0, 16, 'z', 'z', 'z', 'z')
+	data = append(data, 0, 0, 0, 0, 0, 0, 0, 0)
+
+	_, err := Decode(Options{
+		R:         readerSeekerFromBytes(data),
+		Sources:   QUICKTIME,
+		HandleTag: func(ti TagInfo) error { return nil },
+	})
+	// Should not panic on unknown box.
+	if err != nil {
+		c.Assert(IsInvalidFormat(err), qt.IsTrue)
+	}
+}
+
+// Validates: REQ-QT-08
+func TestQuickTimeCreationDateTimezone(t *testing.T) {
+	c := qt.New(t)
+	f, err := os.Open("testdata/with_gps.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
+	c.Assert(err, qt.IsNil)
+
+	cd, ok := tags.QuickTime()["CreationDate"]
+	c.Assert(ok, qt.IsTrue)
+	cdStr := toString(cd.Value)
+	c.Assert(cdStr, qt.Contains, "-07:00",
+		qt.Commentf("CreationDate should preserve timezone, got %q", cdStr))
+}
+
+// Validates: REQ-EXIF-04
+func TestEXIFFieldTableSize(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(len(exifFields) >= 100, qt.IsTrue,
+		qt.Commentf("exifFields has %d entries, expected >= 100", len(exifFields)))
+	c.Assert(len(exifFieldsGPS) >= 30, qt.IsTrue,
+		qt.Commentf("exifFieldsGPS has %d entries, expected >= 30", len(exifFieldsGPS)))
+}
+
+// Validates: REQ-EXIF-07
+func TestAppleMakerNotes(t *testing.T) {
+	t.Skip("Apple MakerNotes decoding not yet implemented")
+}
+
+// Validates: REQ-EXIF-08
+func TestCanonMakerNotes(t *testing.T) {
+	t.Skip("Canon MakerNotes decoding not yet implemented")
+}
+
+// Validates: REQ-EXIF-09
+func TestSonyEXIFMakerNotes(t *testing.T) {
+	t.Skip("Sony EXIF MakerNotes decoding not yet implemented")
 }

@@ -1,6 +1,7 @@
 package videometa
 
 import (
+	"io"
 	"os"
 	"testing"
 )
@@ -82,6 +83,40 @@ func BenchmarkDecodeAllMinimalMP4(b *testing.B) {
 	}
 }
 
+// Validates: REQ-NF-02, REQ-NF-03
+func BenchmarkDecodeExifToolQuickTimeMOV(b *testing.B) {
+	data, err := os.ReadFile("testdata/exiftool_quicktime.mov")
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for b.Loop() {
+		r := newBytesReadSeeker(data)
+		_, _, _ = DecodeAll(Options{
+			R:       r,
+			Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG | MAKERNOTES,
+		})
+	}
+}
+
+// Validates: REQ-NF-03
+func BenchmarkDecodeWithAudioMP4(b *testing.B) {
+	data, err := os.ReadFile("testdata/with_audio.mp4")
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for b.Loop() {
+		r := newBytesReadSeeker(data)
+		_, _, _ = DecodeAll(Options{
+			R:       r,
+			Sources: QUICKTIME | CONFIG,
+		})
+	}
+}
+
 // newBytesReadSeeker creates an io.ReadSeeker from a byte slice.
 // Separate from test helper to avoid import cycle.
 func newBytesReadSeeker(data []byte) *bytesReadSeeker {
@@ -95,7 +130,7 @@ type bytesReadSeeker struct {
 
 func (b *bytesReadSeeker) Read(p []byte) (int, error) {
 	if b.pos >= len(b.data) {
-		return 0, os.ErrClosed
+		return 0, io.EOF
 	}
 	n := copy(p, b.data[b.pos:])
 	b.pos += n

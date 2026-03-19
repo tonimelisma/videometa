@@ -2,6 +2,7 @@ package videometa
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"strings"
 )
@@ -72,7 +73,7 @@ func (d *videoDecoderMP4) decodeIlstAtomData(atomStart int64, atomSize uint64, t
 			break
 		}
 
-		if dataType.String() == "data" {
+		if dataType.String() == "data" { //nolint:gocritic
 			typeIndicator := d.read4()
 			locale := d.read4()
 
@@ -81,7 +82,17 @@ func (d *videoDecoderMP4) decodeIlstAtomData(atomStart int64, atomSize uint64, t
 				break
 			}
 
-			value := d.decodeQTValue(typeIndicator, valueLen)
+			// Special handling for binary atoms with non-standard encoding.
+			var value any
+			switch {
+			case (tagName == "TrackNumber" || tagName == "DiskNumber") && typeIndicator == 0 && valueLen >= 6:
+				value = d.decodeTrackDiskNumber(valueLen)
+			case tagName == "BeatsPerMinute" && typeIndicator == qtDataTypeSInt8 && valueLen >= 2:
+				// tmpo stores BPM as big-endian uint16, but type indicator may incorrectly say int8.
+				value = int(binary.BigEndian.Uint16(d.readBytes(valueLen)[:2]))
+			default:
+				value = d.decodeQTValue(typeIndicator, valueLen)
+			}
 			if value != nil {
 				if locale != 0 {
 					// Emit localized variant with language-country suffix,
@@ -160,7 +171,8 @@ func (d *videoDecoderMP4) decodeFreeformAtom(atomStart int64, atomSize uint64) {
 func (d *videoDecoderMP4) decodeQTValue(typeIndicator uint32, valueLen int) any {
 	switch typeIndicator {
 	case qtDataTypeUTF8:
-		return printableString(string(d.readBytes(valueLen)))
+		// Preserve trailing spaces (exiftool does), but strip nulls and control chars.
+		return cleanQTString(string(d.readBytes(valueLen)))
 	case qtDataTypeUTF16BE:
 		data := d.readBytes(valueLen)
 		return decodeUTF16BE(data)
@@ -213,6 +225,37 @@ func (d *videoDecoderMP4) decodeQTValue(typeIndicator uint32, valueLen int) any 
 		}
 	}
 	return nil
+}
+
+// cleanQTString removes nulls and control characters but preserves spaces.
+func cleanQTString(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == 0 {
+			continue
+		}
+		if r >= 32 || r == '\t' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// decodeTrackDiskNumber decodes the binary trkn/disk atom value.
+// Format: 2 bytes padding + uint16 number + uint16 total [+ 2 padding].
+// Returns "N of M" matching exiftool.
+func (d *videoDecoderMP4) decodeTrackDiskNumber(valueLen int) any {
+	data := d.readBytes(valueLen)
+	if len(data) < 6 {
+		return nil
+	}
+	num := binary.BigEndian.Uint16(data[2:4])
+	total := binary.BigEndian.Uint16(data[4:6])
+	if total > 0 {
+		return fmt.Sprintf("%d of %d", num, total)
+	}
+	return fmt.Sprintf("%d", num)
 }
 
 // decodeUTF16BE decodes a UTF-16 big-endian byte slice to a Go string.

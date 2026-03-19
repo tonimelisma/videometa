@@ -16,7 +16,7 @@ Tasks organized by milestone. Each task traces to requirements (`REQ-*`) and arc
 | M8: Robustness + Testing | ✅ Complete |
 | M9: Manufacturer Metadata | ✅ Complete |
 | M10: Documentation + Release | ✅ Complete |
-| M11: Extended Test Coverage | Future work |
+| M11: Extended Test Coverage | ✅ Complete |
 
 ---
 
@@ -57,13 +57,26 @@ Reframed from "EXIF MakerNotes" to cover manufacturer-specific video container m
 
 ---
 
-## Milestone 11: Extended Test Coverage (post-v0.1.0)
+## Milestone 11: Exhaustive Tests + Composite Tags
 
 | Task | Description | Status | Files |
 |------|-------------|--------|-------|
-| TASK-M11-01 | Android MP4 test file + golden test | Pending | testdata/ |
-| TASK-M11-02 | GoPro MP4 test file + golden test | Pending | testdata/ |
-| TASK-M11-03 | DJI drone MP4 test file + golden test | Pending | testdata/ |
-| TASK-M11-04 | Pro camera MOV test file + golden test | Pending | testdata/ |
-| TASK-M11-05 | 64-bit box size test file | Pending | testdata/ |
-| TASK-M11-06 | EXIF MakerNotes (Apple, Canon, Sony in EXIF IFD) | Pending | metadecoder_makernotes_*.go |
+| TASK-M11-01 | Exhaustive golden tests for all 6 test files (100% tag coverage) | ✅ Complete | videometa_golden_test.go |
+| TASK-M11-02 | Composite tag emission (ImageSize, Megapixels, AvgBitrate, Rotation, GPS*, Aperture, ShutterSpeed, FocalLength35efl, LightValue, LensID) | ✅ Complete | videometa.go |
+| TASK-M11-03 | Fix nerfed tests (TestDecodeTruncatedMP4, TestWarnfCallback, TestDecodeTimeout) | ✅ Complete | videometa_test.go |
+| TASK-M11-04 | Add traceability comments (99 total // Validates: entries) | ✅ Complete | *_test.go |
+| TASK-M11-05 | Fix decoder bugs (GPSCoordinates format, tkhd multi-track, DiskNumber/TrackNumber, BeatsPerMinute, old-style text atoms, HandlerVendorID null, MOV language code) | ✅ Complete | videodecoder_mp4.go, metadecoder_quicktime.go, helpers.go |
+| TASK-M11-06 | New requirement tests (HandleTagFieldsPopulated, VideoConfig, Box64BitExtendedSize, BoxSkipUnknown, QuickTimeCreationDateTimezone, EXIFFieldTableSize) | ✅ Complete | videometa_test.go |
+| TASK-M11-07 | Real-world benchmarks (exiftool_quicktime.mov, with_audio.mp4) | ✅ Complete | videometa_bench_test.go |
+| TASK-M11-08 | Fuzz seed expansion (6 files for FuzzDecodeAllMP4) | ✅ Complete | videometa_fuzz_test.go |
+
+## Backlog: Extended Test Coverage
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-BL-01 | Android MP4 test file + golden test | Pending | testdata/ |
+| TASK-BL-02 | GoPro MP4 test file + golden test | Pending | testdata/ |
+| TASK-BL-03 | DJI drone MP4 test file + golden test | Pending | testdata/ |
+| TASK-BL-04 | Pro camera MOV test file + golden test | Pending | testdata/ |
+| TASK-BL-05 | 64-bit box size test file | Pending | testdata/ |
+| TASK-BL-06 | EXIF MakerNotes (Apple, Canon, Sony in EXIF IFD) | Pending | metadecoder_makernotes_*.go |

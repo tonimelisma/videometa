@@ -240,6 +240,84 @@ func parseISO6709Coord(s string, isLat bool) (float64, error) {
 	return sign * (deg + min/60 + sec/3600), nil
 }
 
+// convertDateToExiftool converts an ISO 8601 date string to exiftool's format.
+// "2024-06-15T10:30:00-0700" → "2024:06:15 10:30:00-07:00"
+// Returns empty string if unparseable.
+func convertDateToExiftool(s string) string {
+	t, err := parseTimeString(s)
+	if err != nil {
+		return ""
+	}
+	_, offset := t.Zone()
+	if offset == 0 && t.Location() == time.UTC {
+		return t.Format("2006:01:02 15:04:05")
+	}
+	return t.Format("2006:01:02 15:04:05-07:00")
+}
+
+// convertISO6709ToExiftool converts an ISO 6709 coordinate string like
+// "+34.0592-118.4460+042.938/" to exiftool's space-separated format
+// "34.0592 -118.446 42.938".
+func convertISO6709ToExiftool(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimSuffix(s, "/")
+	parts := splitISO6709(s)
+	if len(parts) < 2 {
+		return s
+	}
+
+	var result []string
+	for _, p := range parts {
+		sign := ""
+		v := p
+		if len(v) > 0 && (v[0] == '+' || v[0] == '-') {
+			if v[0] == '-' {
+				sign = "-"
+			}
+			v = v[1:]
+		}
+		// Parse as float to normalize (removes leading zeros, trailing zeros).
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			result = append(result, p) // Keep original if unparseable.
+			continue
+		}
+		result = append(result, sign+strconv.FormatFloat(f, 'f', -1, 64))
+	}
+
+	return strings.Join(result, " ")
+}
+
+// parseGPSCoordinatesString parses exiftool-formatted GPS coordinates
+// (space-separated: "lat lon [alt]") or ISO 6709 format.
+func parseGPSCoordinatesString(s string) (lat, lon float64, err error) {
+	s = strings.TrimSpace(s)
+	// Try space-separated format first (exiftool output format).
+	parts := strings.Fields(s)
+	if len(parts) >= 2 {
+		lat, err1 := strconv.ParseFloat(parts[0], 64)
+		lon, err2 := strconv.ParseFloat(parts[1], 64)
+		if err1 == nil && err2 == nil {
+			return lat, lon, nil
+		}
+	}
+	// Fall back to ISO 6709.
+	return parseISO6709(s)
+}
+
+// parseGPSAltitudeFromString extracts altitude from a space-separated GPS string.
+// Returns (altitude, true) if found, or (0, false) if not.
+func parseGPSAltitudeFromString(s string) (float64, bool) {
+	parts := strings.Fields(s)
+	if len(parts) >= 3 {
+		alt, err := strconv.ParseFloat(parts[2], 64)
+		if err == nil {
+			return alt, true
+		}
+	}
+	return 0, false
+}
+
 // toFloat64 converts a numeric value to float64.
 func toFloat64(v any) (float64, bool) {
 	switch n := v.(type) {
@@ -248,6 +326,10 @@ func toFloat64(v any) (float64, bool) {
 	case float32:
 		return float64(n), true
 	case int:
+		return float64(n), true
+	case int8:
+		return float64(n), true
+	case int16:
 		return float64(n), true
 	case int32:
 		return float64(n), true

@@ -65,6 +65,10 @@ func (d *videoDecoderMP4) decode() error {
 				return err
 			}
 		case "moov":
+			// Files starting with moov (no ftyp) are QuickTime MOV.
+			if !d.isMOV && startPos == 0 {
+				d.isMOV = true
+			}
 			if err := d.decodeMoov(startPos, boxSize); err != nil {
 				return err
 			}
@@ -362,24 +366,25 @@ func (d *videoDecoderMP4) decodeTkhd() {
 	}
 
 	if d.opts.Sources.Has(QUICKTIME) {
-		d.emitQuickTimeTag("TrackHeaderVersion", version)
-		d.emitQuickTimeTag("TrackCreateDate", quickTimeToTime(creationTime))
-		d.emitQuickTimeTag("TrackModifyDate", quickTimeToTime(modificationTime))
-		d.emitQuickTimeTag("TrackID", trackID)
-		// tkhd duration is in movie timescale units; fall back to 1000 if mvhd not yet seen.
-		trackTimescale := d.movieTimescale
-		if trackTimescale == 0 {
-			trackTimescale = 1000
-		}
-		d.emitQuickTimeTag("TrackDuration", durationSeconds(duration, trackTimescale))
-		d.emitQuickTimeTag("TrackLayer", layer)
-		d.emitQuickTimeTag("TrackVolume", fixedPoint88ToFloat(volume))
-		// Only emit ImageWidth/ImageHeight for video tracks (audio tracks have zero dimensions).
+		// Exiftool emits tkhd tags from the video track only. In standard MP4/MOV
+		// files, the video track has non-zero width. Audio-only tkhd tags are
+		// discarded to match exiftool.
 		if width > 0 {
+			d.emitQuickTimeTag("TrackHeaderVersion", version)
+			d.emitQuickTimeTag("TrackCreateDate", quickTimeToTime(creationTime))
+			d.emitQuickTimeTag("TrackModifyDate", quickTimeToTime(modificationTime))
+			d.emitQuickTimeTag("TrackID", trackID)
+			trackTimescale := d.movieTimescale
+			if trackTimescale == 0 {
+				trackTimescale = 1000
+			}
+			d.emitQuickTimeTag("TrackDuration", durationSeconds(duration, trackTimescale))
+			d.emitQuickTimeTag("TrackLayer", layer)
+			d.emitQuickTimeTag("TrackVolume", fixedPoint88ToFloat(volume))
 			d.emitQuickTimeTag("ImageWidth", width)
 			d.emitQuickTimeTag("ImageHeight", height)
+			d.emitQuickTimeTag("MatrixStructure", formatMatrix(matrix))
 		}
-		d.emitQuickTimeTag("MatrixStructure", formatMatrix(matrix))
 	}
 }
 
@@ -480,7 +485,11 @@ func (d *videoDecoderMP4) decodeMdhd() {
 		d.emitQuickTimeTag("MediaModifyDate", quickTimeToTime(modificationTime))
 		d.emitQuickTimeTag("MediaTimeScale", timescale)
 		d.emitQuickTimeTag("MediaDuration", durationSeconds(duration, timescale))
-		d.emitQuickTimeTag("MediaLanguageCode", lang)
+		// MOV files use Macintosh language codes (mdhd v0 with raw code 0 = English).
+		// Only emit MediaLanguageCode for ISO 639-2/T codes (MP4/ISOBMFF), matching exiftool.
+		if !d.isMOV || langCode != 0 {
+			d.emitQuickTimeTag("MediaLanguageCode", lang)
+		}
 	}
 }
 
@@ -879,7 +888,7 @@ func (d *videoDecoderMP4) decodeUdta(udtaStart int64, udtaSize uint64) {
 					textSize := int(d.read2())
 					_ = d.read2() // language code
 					if textSize > 0 && textSize <= dataLen-4 {
-						text := printableString(string(d.readBytes(textSize)))
+						text := cleanQTString(string(d.readBytes(textSize)))
 						tagName := ilstAtomToTagName(boxTypeStr)
 						if tagName != "" {
 							d.emitQuickTimeTag(tagName, text)
@@ -992,7 +1001,10 @@ func (d *videoDecoderMP4) decodeMetaHdlrReturn(hdlrStart int64, hdlrSize uint64)
 
 	if d.opts.Sources.Has(QUICKTIME) {
 		d.emitQuickTimeTag("HandlerType", handlerType.String())
-		d.emitQuickTimeTag("HandlerVendorID", vendorID.String())
+		// Only emit HandlerVendorID when it's a printable non-null FourCC.
+		if isASCIIFourCC(vendorID) {
+			d.emitQuickTimeTag("HandlerVendorID", vendorID.String())
+		}
 		if description != "" {
 			d.emitQuickTimeTag("HandlerDescription", description)
 		}
@@ -1111,6 +1123,20 @@ func (d *videoDecoderMP4) decodeUUID(startPos int64, boxSize uint64) {
 
 // emitQuickTimeTag sends a QuickTime source tag via the centralized emitTag.
 func (d *videoDecoderMP4) emitQuickTimeTag(name string, value any) {
+	// Convert GPSCoordinates from ISO6709 to exiftool's space-separated decimal format.
+	if name == "GPSCoordinates" {
+		if s, ok := value.(string); ok {
+			value = convertISO6709ToExiftool(s)
+		}
+	}
+	// Convert ISO 8601 date strings to exiftool format (YYYY:MM:DD HH:MM:SS±HH:MM).
+	if name == "CreationDate" || name == "ContentCreateDate" {
+		if s, ok := value.(string); ok {
+			if converted := convertDateToExiftool(s); converted != "" {
+				value = converted
+			}
+		}
+	}
 	d.emitTag(TagInfo{
 		Source:    QUICKTIME,
 		Tag:       name,

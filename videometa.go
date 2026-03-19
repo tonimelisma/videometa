@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"time"
 )
 
@@ -22,6 +23,7 @@ const (
 	CONFIG                        // Codec/dimension info from container structure
 	MAKERNOTES                    // Manufacturer-specific metadata (Pentax TAGS, etc.)
 	XML                           // Structured XML metadata (Sony NRTM, etc.)
+	COMPOSITE                     // Derived/computed tags (matching exiftool Composite group)
 )
 
 // Has reports whether s contains the given source.
@@ -207,6 +209,7 @@ type Tags struct {
 	config     map[string]TagInfo
 	makernotes map[string]TagInfo
 	xml        map[string]TagInfo
+	composite  map[string]TagInfo
 }
 
 // Add stores a tag in the appropriate source map.
@@ -227,6 +230,8 @@ func (t *Tags) Add(tag TagInfo) {
 		m = &t.makernotes
 	case XML:
 		m = &t.xml
+	case COMPOSITE:
+		m = &t.composite
 	default:
 		return
 	}
@@ -241,7 +246,7 @@ func (t *Tags) Add(tag TagInfo) {
 func (t Tags) All() map[string]TagInfo {
 	result := make(map[string]TagInfo)
 	// Lowest priority first, highest last (overwrites).
-	for _, m := range []map[string]TagInfo{t.config, t.iptc, t.xml, t.makernotes, t.quicktime, t.xmp, t.exif} {
+	for _, m := range []map[string]TagInfo{t.composite, t.config, t.iptc, t.xml, t.makernotes, t.quicktime, t.xmp, t.exif} {
 		for k, v := range m {
 			result[k] = v
 		}
@@ -269,6 +274,9 @@ func (t Tags) MakerNotes() map[string]TagInfo { return t.makernotes }
 
 // XML returns all structured XML metadata tags (e.g., Sony NRTM).
 func (t Tags) XML() map[string]TagInfo { return t.xml }
+
+// Composite returns all derived/computed tags.
+func (t Tags) Composite() map[string]TagInfo { return t.composite }
 
 // GetDateTime returns the best available creation time with original timezone.
 // Priority: EXIF DateTimeOriginal > XMP CreateDate > QuickTime CreationDate > QuickTime CreateDate.
@@ -331,10 +339,10 @@ func (t Tags) GetLatLong() (lat, lon float64, err error) {
 		}
 	}
 
-	// Try QuickTime GPS (from ISO6709 or ©xyz).
+	// Try QuickTime GPS (space-separated decimal or ISO6709).
 	if gpsTag, ok := t.quicktime["GPSCoordinates"]; ok {
 		if s, ok := gpsTag.Value.(string); ok {
-			if lat, lon, err := parseISO6709(s); err == nil {
+			if lat, lon, err := parseGPSCoordinatesString(s); err == nil {
 				return lat, lon, nil
 			}
 		}
@@ -352,6 +360,7 @@ func DecodeAll(opts Options) (Tags, DecodeResult, error) {
 		return nil
 	}
 	result, err := Decode(opts)
+	computeComposite(&tags, result)
 	return tags, result, err
 }
 
@@ -407,4 +416,97 @@ func (bd *baseDecoder) emitTag(ti TagInfo) {
 // Stub — implemented in videodecoder_mp4.go.
 func newVideoDecoderMP4(bd *baseDecoder) decoder {
 	return &videoDecoderMP4{baseDecoder: bd}
+}
+
+// computeComposite derives Composite tags from already-decoded data,
+// matching exiftool's Composite group output.
+func computeComposite(tags *Tags, result DecodeResult) {
+	add := func(name string, value any) {
+		tags.Add(TagInfo{Source: COMPOSITE, Tag: name, Namespace: "Composite", Value: value})
+	}
+
+	w := result.VideoConfig.Width
+	h := result.VideoConfig.Height
+
+	if w > 0 && h > 0 {
+		add("ImageSize", fmt.Sprintf("%d %d", w, h))
+		add("Megapixels", float64(w*h)/1000000.0)
+	}
+
+	add("Rotation", result.VideoConfig.Rotation)
+
+	// AvgBitrate: MediaDataSize * 8 / Duration.
+	qt := tags.QuickTime()
+	if mdSize, ok := qt["MediaDataSize"]; ok {
+		if dur, ok := qt["Duration"]; ok {
+			if sizeF, ok := toFloat64(mdSize.Value); ok {
+				if durF, ok := toFloat64(dur.Value); ok && durF > 0 {
+					add("AvgBitrate", int(math.Round(sizeF*8/durF)))
+				}
+			}
+		}
+	}
+
+	// GPS decomposition from QuickTime GPSCoordinates (space-separated decimal).
+	if gpsTag, ok := qt["GPSCoordinates"]; ok {
+		if s, ok := gpsTag.Value.(string); ok {
+			lat, lon, err := parseGPSCoordinatesString(s)
+			if err == nil {
+				add("GPSLatitude", lat)
+				add("GPSLongitude", lon)
+				add("GPSPosition", fmt.Sprintf("%g %g", lat, lon))
+			}
+			alt, altOk := parseGPSAltitudeFromString(s)
+			if altOk {
+				ref := 0
+				if alt < 0 {
+					ref = 1
+					alt = -alt
+				}
+				add("GPSAltitude", alt)
+				add("GPSAltitudeRef", ref)
+			}
+		}
+	}
+
+	// Photography composites from MakerNotes.
+	mn := tags.MakerNotes()
+
+	if fn, ok := mn["FNumber"]; ok {
+		if v, ok := toFloat64(fn.Value); ok {
+			add("Aperture", v)
+		}
+	}
+
+	if et, ok := mn["ExposureTime"]; ok {
+		if v, ok := toFloat64(et.Value); ok {
+			add("ShutterSpeed", v)
+		}
+	}
+
+	if fl, ok := mn["FocalLength"]; ok {
+		if v, ok := toFloat64(fl.Value); ok {
+			add("FocalLength35efl", v)
+		}
+	}
+
+	// LightValue: log2(Aperture^2 / ShutterSpeed) - log2(ISO/100).
+	if apTag, ok := mn["FNumber"]; ok {
+		if etTag, ok := mn["ExposureTime"]; ok {
+			if isoTag, ok := mn["ISO"]; ok {
+				ap, _ := toFloat64(apTag.Value)
+				et, _ := toFloat64(etTag.Value)
+				iso, _ := toFloat64(isoTag.Value)
+				if ap > 0 && et > 0 && iso > 0 {
+					lv := math.Log2(ap*ap/et) - math.Log2(iso/100)
+					add("LightValue", lv)
+				}
+			}
+		}
+	}
+
+	// LensID from QuickTime freeform LensModel.
+	if lm, ok := qt["LensModel"]; ok {
+		add("LensID", lm.Value)
+	}
 }

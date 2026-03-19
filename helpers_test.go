@@ -172,6 +172,7 @@ func TestTrimNulls(t *testing.T) {
 	c.Assert(trimNulls([]byte{0, 0}), qt.DeepEquals, []byte{})
 }
 
+// Validates: REQ-CFG-03
 func TestMatrixToRotation(t *testing.T) {
 	c := qt.New(t)
 
@@ -187,6 +188,7 @@ func TestMatrixToRotation(t *testing.T) {
 	c.Assert(matrixToRotation([9]int32{0, 0, 0, 0, 0, 0, 0, 0, 0}), qt.Equals, 0)
 }
 
+// Validates: REQ-XMP-01
 func TestCapitalizeFirst(t *testing.T) {
 	c := qt.New(t)
 
