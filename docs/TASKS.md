@@ -19,6 +19,7 @@ Tasks organized by milestone. Each task traces to requirements (`REQ-*`) and arc
 | M11: Extended Test Coverage | ✅ Complete |
 | M12: Implement Skipped Tests | ✅ Complete |
 | M13: Fix Weak Tests | ✅ Complete |
+| M14: Test & Error Robustness | ✅ Complete |
 
 ---
 
@@ -105,6 +106,20 @@ Comprehensive test audit: strengthen all non-specific assertions, fix fuzz error
 | TASK-M13-05 | TestDecodeMakerNotesRouting asserts warning content + no MAKERNOTES tags | ✅ Complete | videometa_test.go |
 | TASK-M13-06 | TestBoxSkipUnknown asserts no error + ftyp tag emitted | ✅ Complete | videometa_test.go |
 | TASK-M13-07 | TestLimitTagSize three-tier test proving exact > mechanism | ✅ Complete | videometa_test.go |
+
+---
+
+## Milestone 14: Test & Error Robustness
+
+Eliminate fragile string matching in error typing, add per-decoder fuzz targets, expand latency coverage, test large-mdat io.Reader path, add seed corpus regression test.
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M14-01 | Replace `isInvalidFormatErrorCandidate` string matching with `stopInvalidFormat` at source | ✅ Complete | io.go, videometa.go, helpers.go |
+| TASK-M14-02 | Add FuzzDecodeEXIF, FuzzDecodeXMP, FuzzDecodeIPTC fuzz targets | ✅ Complete | videometa_fuzz_test.go |
+| TASK-M14-03 | Expand TestDecodeLatencyTarget to exiftool_quicktime.mov and with_audio.mp4 | ✅ Complete | videometa_bench_test.go |
+| TASK-M14-04 | Add TestReaderOnlyLargeMdat for truncated large mdat with non-seekable reader | ✅ Complete | videometa_test.go |
+| TASK-M14-05 | Add TestSeedCorpusDecodesSuccessfully regression test for all valid test files | ✅ Complete | videometa_bench_test.go |
 
 ---
 

@@ -50,12 +50,20 @@ func (sr *streamReader) stop(err error) {
 	panic(errStop)
 }
 
+// stopInvalidFormat wraps err as InvalidFormatError before stopping.
+// Use for errors caused by malformed input (truncated reads, oversized
+// allocations) so the Decode boundary doesn't need string matching.
+func (sr *streamReader) stopInvalidFormat(err error) {
+	sr.stop(&InvalidFormatError{Err: err})
+}
+
 // readFull reads exactly len(p) bytes or stops.
+// EOF/UnexpectedEOF from truncated data is always malformed input.
 func (sr *streamReader) readFull(p []byte) {
 	n, err := io.ReadFull(sr.r, p)
 	sr.readerOffset += int64(n)
 	if err != nil {
-		sr.stop(err)
+		sr.stopInvalidFormat(err)
 	}
 }
 
@@ -96,7 +104,7 @@ func (sr *streamReader) readBytes(n int) []byte {
 	// Fuzz defense: reject absurd allocations.
 	const maxAlloc = 10 << 20 // 10 MB
 	if n > maxAlloc {
-		sr.stop(fmt.Errorf("videometa: allocation too large: %d bytes", n))
+		sr.stopInvalidFormat(fmt.Errorf("allocation too large: %d bytes", n))
 	}
 	b := make([]byte, n)
 	sr.readFull(b)
@@ -154,11 +162,12 @@ func (sr *streamReader) skip(n int64) {
 		sr.readerOffset += n
 		return
 	}
-	// Fallback: read and discard.
+	// Fallback: read and discard. EOF here means the file is shorter than
+	// the box header claimed — that's malformed input.
 	written, err := io.CopyN(io.Discard, sr.r, n)
 	sr.readerOffset += written
 	if err != nil {
-		sr.stop(err)
+		sr.stopInvalidFormat(err)
 	}
 }
 
@@ -176,7 +185,7 @@ func (sr *streamReader) preservePos(fn func()) {
 func (sr *streamReader) bufferedReader(length int) *readerCloser {
 	const maxBufferedRead = 10 << 20 // 10 MB
 	if length > maxBufferedRead {
-		sr.stop(fmt.Errorf("videometa: buffered read too large: %d bytes", length))
+		sr.stopInvalidFormat(fmt.Errorf("buffered read too large: %d bytes", length))
 	}
 
 	bp := bytesReaderPool.Get().(*bytesReaderPoolItem)

@@ -718,6 +718,39 @@ func TestBestEffortPartial(t *testing.T) {
 		qt.Commentf("moov tags should be emitted after skipping small mdat"))
 }
 
+// Validates: ARCH-IO-05, REQ-API-18
+func TestReaderOnlyLargeMdat(t *testing.T) {
+	c := qt.New(t)
+
+	// Synthetic non-fast-start MP4: ftyp + mdat (claims 100MB but only 8 bytes
+	// of actual payload follow the header) + moov with mvhd.
+	// With a non-seekable reader, the decoder must try to skip the mdat via
+	// io.CopyN. Since the mdat claims to be huge but the stream ends early,
+	// we expect an InvalidFormatError (EOF during skip).
+	data := make([]byte, 0, 200)
+
+	// ftyp box (20 bytes).
+	data = append(data, 0, 0, 0, 20, 'f', 't', 'y', 'p')
+	data = append(data, 'i', 's', 'o', 'm', 0, 0, 0, 0, 'i', 's', 'o', 'm')
+
+	// mdat box: header claims 100MB but only 8 bytes of padding follow.
+	mdatSize := uint32(100 * 1024 * 1024)
+	data = append(data, byte(mdatSize>>24), byte(mdatSize>>16), byte(mdatSize>>8), byte(mdatSize))
+	data = append(data, 'm', 'd', 'a', 't')
+	data = append(data, 0, 0, 0, 0, 0, 0, 0, 0) // 8 bytes of padding
+
+	_, err := Decode(Options{
+		R:         readerOnly{readerSeekerFromBytes(data)},
+		Sources:   QUICKTIME | CONFIG,
+		HandleTag: func(ti TagInfo) error { return nil },
+	})
+	// Stream ends before mdat can be fully skipped.
+	c.Assert(err, qt.IsNotNil,
+		qt.Commentf("large mdat with truncated stream should error"))
+	c.Assert(IsInvalidFormat(err), qt.IsTrue,
+		qt.Commentf("expected InvalidFormatError, got: %T: %v", err, err))
+}
+
 // Validates: REQ-BOX-03
 func TestBoxExtendToEOF(t *testing.T) {
 	c := qt.New(t)

@@ -157,22 +157,87 @@ func (b *bytesReadSeeker) Seek(offset int64, whence int) (int64, error) {
 
 // Validates: REQ-NF-02
 func TestDecodeLatencyTarget(t *testing.T) {
-	c := qt.New(t)
-	f, err := os.Open("testdata/minimal.mp4")
-	c.Assert(err, qt.IsNil)
-	defer func() { _ = f.Close() }()
-
-	start := time.Now()
-	_, err = Decode(Options{
-		R:       f,
-		Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
-		HandleTag: func(ti TagInfo) error {
-			return nil
+	tests := []struct {
+		name    string
+		path    string
+		sources Source
+		ceiling time.Duration
+	}{
+		{
+			name:    "minimal.mp4",
+			path:    "testdata/minimal.mp4",
+			sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
+			ceiling: 2 * time.Millisecond,
 		},
-	})
-	elapsed := time.Since(start)
-	c.Assert(err, qt.IsNil)
-	// REQ-NF-02: < 500μs target. Use 2ms ceiling for CI variability.
-	c.Assert(elapsed < 2*time.Millisecond, qt.IsTrue,
-		qt.Commentf("decode took %v, expected < 2ms", elapsed))
+		{
+			name:    "exiftool_quicktime.mov",
+			path:    "testdata/exiftool_quicktime.mov",
+			sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG | MAKERNOTES,
+			ceiling: 5 * time.Millisecond,
+		},
+		{
+			name:    "with_audio.mp4",
+			path:    "testdata/with_audio.mp4",
+			sources: QUICKTIME | CONFIG,
+			ceiling: 5 * time.Millisecond,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			f, err := os.Open(tt.path)
+			c.Assert(err, qt.IsNil)
+			defer func() { _ = f.Close() }()
+
+			start := time.Now()
+			_, err = Decode(Options{
+				R:       f,
+				Sources: tt.sources,
+				HandleTag: func(ti TagInfo) error {
+					return nil
+				},
+			})
+			elapsed := time.Since(start)
+			c.Assert(err, qt.IsNil)
+			c.Assert(elapsed < tt.ceiling, qt.IsTrue,
+				qt.Commentf("decode took %v, expected < %v", elapsed, tt.ceiling))
+		})
+	}
+}
+
+// Validates: REQ-NF-05
+func TestSeedCorpusDecodesSuccessfully(t *testing.T) {
+	// Ensure all committed test files decode without error.
+	// Catches regressions where valid files start returning errors.
+	files := []string{
+		"testdata/minimal.mp4",
+		"testdata/nonfaststart.mp4",
+		"testdata/with_audio.mp4",
+		"testdata/with_gps.mp4",
+		"testdata/exiftool_quicktime.mov",
+	}
+
+	for _, path := range files {
+		t.Run(path, func(t *testing.T) {
+			c := qt.New(t)
+			f, err := os.Open(path)
+			c.Assert(err, qt.IsNil)
+			defer func() { _ = f.Close() }()
+
+			tagCount := 0
+			_, err = Decode(Options{
+				R:       f,
+				Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG | MAKERNOTES,
+				HandleTag: func(ti TagInfo) error {
+					tagCount++
+					return nil
+				},
+			})
+			c.Assert(err, qt.IsNil,
+				qt.Commentf("valid file %s must decode without error", path))
+			c.Assert(tagCount > 0, qt.IsTrue,
+				qt.Commentf("valid file %s must produce at least one tag", path))
+		})
+	}
 }
