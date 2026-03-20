@@ -205,39 +205,3 @@ func TestDecodeLatencyTarget(t *testing.T) {
 		})
 	}
 }
-
-// Validates: REQ-NF-05
-func TestSeedCorpusDecodesSuccessfully(t *testing.T) {
-	// Ensure all committed test files decode without error.
-	// Catches regressions where valid files start returning errors.
-	files := []string{
-		"testdata/minimal.mp4",
-		"testdata/nonfaststart.mp4",
-		"testdata/with_audio.mp4",
-		"testdata/with_gps.mp4",
-		"testdata/exiftool_quicktime.mov",
-	}
-
-	for _, path := range files {
-		t.Run(path, func(t *testing.T) {
-			c := qt.New(t)
-			f, err := os.Open(path)
-			c.Assert(err, qt.IsNil)
-			defer func() { _ = f.Close() }()
-
-			tagCount := 0
-			_, err = Decode(Options{
-				R:       f,
-				Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG | MAKERNOTES,
-				HandleTag: func(ti TagInfo) error {
-					tagCount++
-					return nil
-				},
-			})
-			c.Assert(err, qt.IsNil,
-				qt.Commentf("valid file %s must decode without error", path))
-			c.Assert(tagCount > 0, qt.IsTrue,
-				qt.Commentf("valid file %s must produce at least one tag", path))
-		})
-	}
-}

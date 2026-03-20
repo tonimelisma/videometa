@@ -94,7 +94,9 @@ func FuzzDecodeEXIF(f *testing.F) {
 			result: &DecodeResult{},
 		}
 		d := &videoDecoderMP4{baseDecoder: bd}
-		// Must not panic on any input — decodeEXIF has its own recovery.
+		// decodeEXIF has its own panic recovery — errors are swallowed
+		// internally (partial failure). No error escapes, so the only
+		// assertion is that the test doesn't crash.
 		d.decodeEXIF(bytes.NewReader(data))
 	})
 }
@@ -116,7 +118,9 @@ func FuzzDecodeXMP(f *testing.F) {
 			result: &DecodeResult{},
 		}
 		d := &videoDecoderMP4{baseDecoder: bd}
-		// Must not panic — decodeXMP returns error gracefully.
+		// decodeXMP handles malformed XML via Warnf and returns nil.
+		// No error escapes for malformed input, so the only assertion
+		// is that the test doesn't crash.
 		_ = d.decodeXMP(bytes.NewReader(data))
 	})
 }
@@ -144,7 +148,9 @@ func FuzzDecodeIPTC(f *testing.F) {
 			result: &DecodeResult{},
 		}
 		d := &videoDecoderMP4{baseDecoder: bd}
-		// Must not panic — decodeIPTC has its own recovery.
+		// decodeIPTC has its own panic recovery — errors are swallowed
+		// internally (partial failure). No error escapes, so the only
+		// assertion is that the test doesn't crash.
 		d.decodeIPTC(bytes.NewReader(data))
 	})
 }
