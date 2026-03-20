@@ -4,7 +4,6 @@ import (
 	"encoding"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"strconv"
 	"strings"
@@ -32,21 +31,6 @@ func IsInvalidFormat(err error) bool {
 
 func newInvalidFormatErrorf(format string, args ...any) error {
 	return &InvalidFormatError{Err: fmt.Errorf(format, args...)}
-}
-
-// isInvalidFormatErrorCandidate returns true for errors that should be
-// wrapped as InvalidFormatError when recovered from a panic.
-func isInvalidFormatErrorCandidate(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, io.ErrUnexpectedEOF) {
-		return true
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "unexpected EOF") ||
-		strings.Contains(msg, "invalid format") ||
-		strings.Contains(msg, "allocation too large")
 }
 
 // Rat represents a rational number (numerator/denominator).

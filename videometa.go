@@ -135,11 +135,11 @@ func Decode(opts Options) (result DecodeResult, err error) {
 		if r := recover(); r != nil {
 			if r == errStop {
 				if sr.readErr != nil {
-					if isInvalidFormatErrorCandidate(sr.readErr) {
-						err = &InvalidFormatError{Err: sr.readErr}
-					} else {
-						err = sr.readErr
-					}
+					// Errors already wrapped as InvalidFormatError at the
+					// source (readFull, readBytes, bufferedReader) pass
+					// through directly. Other errors (seek, skip) propagate
+					// as-is.
+					err = sr.readErr
 				}
 			} else if e, ok := r.(error); ok && errors.Is(e, ErrStopWalking) {
 				// ErrStopWalking panicked from HandleTag callback — not an error.
