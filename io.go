@@ -125,6 +125,8 @@ func (sr *streamReader) readFourCC() fourCC {
 
 // pos returns the current reader offset. For seekable readers this uses
 // Seek; for non-seekable readers it returns the tracked offset.
+// Uses stop() not stopInvalidFormat() — a failing tell is an OS-level
+// error, not malformed input.
 func (sr *streamReader) pos() int64 {
 	if sr.canSeek {
 		p, err := sr.rs.Seek(0, io.SeekCurrent)
@@ -137,6 +139,9 @@ func (sr *streamReader) pos() int64 {
 }
 
 // seek moves to an absolute position. Only works with seekable readers.
+// Uses stop() not stopInvalidFormat() — "seek not supported" is a usage
+// error, and seek-to-offset failures are OS-level errors. Malformed input
+// manifests at the subsequent read, which uses stopInvalidFormat().
 func (sr *streamReader) seek(offset int64) {
 	if !sr.canSeek {
 		sr.stop(fmt.Errorf("videometa: seek not supported on io.Reader"))
@@ -157,7 +162,8 @@ func (sr *streamReader) skip(n int64) {
 	if sr.canSeek {
 		_, err := sr.rs.Seek(n, io.SeekCurrent)
 		if err != nil {
-			sr.stop(err)
+			// Box header claimed a size that extends past the file.
+			sr.stopInvalidFormat(err)
 		}
 		sr.readerOffset += n
 		return

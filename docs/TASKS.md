@@ -20,6 +20,7 @@ Tasks organized by milestone. Each task traces to requirements (`REQ-*`) and arc
 | M12: Implement Skipped Tests | ✅ Complete |
 | M13: Fix Weak Tests | ✅ Complete |
 | M14: Test & Error Robustness | ✅ Complete |
+| M15: Test & IO Cleanup | ✅ Complete |
 
 ---
 
@@ -119,7 +120,21 @@ Eliminate fragile string matching in error typing, add per-decoder fuzz targets,
 | TASK-M14-02 | Add FuzzDecodeEXIF, FuzzDecodeXMP, FuzzDecodeIPTC fuzz targets | ✅ Complete | videometa_fuzz_test.go |
 | TASK-M14-03 | Expand TestDecodeLatencyTarget to exiftool_quicktime.mov and with_audio.mp4 | ✅ Complete | videometa_bench_test.go |
 | TASK-M14-04 | Add TestReaderOnlyLargeMdat for truncated large mdat with non-seekable reader | ✅ Complete | videometa_test.go |
-| TASK-M14-05 | Add TestSeedCorpusDecodesSuccessfully regression test for all valid test files | ✅ Complete | videometa_bench_test.go |
+| TASK-M14-05 | Add TestSeedCorpusDecodesSuccessfully regression test for all valid test files | ✅ Complete | videometa_test.go |
+
+---
+
+## Milestone 15: Test & IO Cleanup
+
+Consistency fixes for error typing in IO paths, fuzz target documentation, test file organization.
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M15-01 | Make skip() seekable path use stopInvalidFormat for consistency | ✅ Complete | io.go |
+| TASK-M15-02 | Document why pos()/seek() use stop() not stopInvalidFormat() | ✅ Complete | io.go |
+| TASK-M15-03 | Clarify decoder fuzz targets re: internal recovery and no-error-escape semantics | ✅ Complete | videometa_fuzz_test.go |
+| TASK-M15-04 | Move TestSeedCorpusDecodesSuccessfully from bench to test file | ✅ Complete | videometa_bench_test.go, videometa_test.go |
+| TASK-M15-05 | Add TestKnownInvalidFilesMustError counterpart + document truncated.mp4 exclusion | ✅ Complete | videometa_test.go |
 
 ---
 

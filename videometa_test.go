@@ -812,3 +812,72 @@ func TestBoxExtendToEOF(t *testing.T) {
 	c.Assert(tags["MajorBrand"].Value, qt.Equals, "isom")
 	c.Assert(tags["TimeScale"].Value, qt.Equals, uint32(1000))
 }
+
+// Validates: REQ-NF-05
+func TestSeedCorpusDecodesSuccessfully(t *testing.T) {
+	// Ensure all committed valid test files decode without error.
+	// Catches regressions where valid files start returning errors.
+	// truncated.mp4 is intentionally excluded — it's a malformed file
+	// tested separately in TestKnownInvalidFilesMustError.
+	files := []string{
+		"testdata/minimal.mp4",
+		"testdata/nonfaststart.mp4",
+		"testdata/with_audio.mp4",
+		"testdata/with_gps.mp4",
+		"testdata/exiftool_quicktime.mov",
+	}
+
+	for _, path := range files {
+		t.Run(path, func(t *testing.T) {
+			c := qt.New(t)
+			f, err := os.Open(path)
+			c.Assert(err, qt.IsNil)
+			defer func() { _ = f.Close() }()
+
+			tagCount := 0
+			_, err = Decode(Options{
+				R:       f,
+				Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG | MAKERNOTES,
+				HandleTag: func(ti TagInfo) error {
+					tagCount++
+					return nil
+				},
+			})
+			c.Assert(err, qt.IsNil,
+				qt.Commentf("valid file %s must decode without error", path))
+			c.Assert(tagCount > 0, qt.IsTrue,
+				qt.Commentf("valid file %s must produce at least one tag", path))
+		})
+	}
+}
+
+// Validates: REQ-NF-06
+func TestKnownInvalidFilesMustError(t *testing.T) {
+	// Counterpart to TestSeedCorpusDecodesSuccessfully — known-invalid files
+	// must return InvalidFormatError, not succeed silently.
+	files := []struct {
+		path   string
+		reason string
+	}{
+		{path: "testdata/truncated.mp4", reason: "file truncated mid-box"},
+	}
+
+	for _, tt := range files {
+		t.Run(tt.path, func(t *testing.T) {
+			c := qt.New(t)
+			f, err := os.Open(tt.path)
+			c.Assert(err, qt.IsNil)
+			defer func() { _ = f.Close() }()
+
+			_, err = Decode(Options{
+				R:         f,
+				Sources:   QUICKTIME | CONFIG,
+				HandleTag: func(ti TagInfo) error { return nil },
+			})
+			c.Assert(err, qt.IsNotNil,
+				qt.Commentf("%s (%s) must return error", tt.path, tt.reason))
+			c.Assert(IsInvalidFormat(err), qt.IsTrue,
+				qt.Commentf("%s must return InvalidFormatError, got: %T: %v", tt.path, err, err))
+		})
+	}
+}
