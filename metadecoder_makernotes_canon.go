@@ -1,12 +1,20 @@
 package videometa
 
-import "math"
+import (
+	"bytes"
+	"math"
+)
 
 type canonMakerNoteState struct {
 	focalUnits uint16
 }
 
 func (d *videoDecoderMP4) decodeCanonMakerNotes(data []byte, ctx makerNoteContext) {
+	if bytes.HasPrefix(data, []byte("Canon\x00\x00\x00")) {
+		d.warnMakerNotes("rejecting Canon MakerNotes payload with unsupported Canon preamble")
+		return
+	}
+
 	md := newMakerNoteDecoder(data, ctx.byteOrder, 0)
 	state := &canonMakerNoteState{}
 

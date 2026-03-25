@@ -3,6 +3,7 @@ package videometa
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
 	"os"
 	"testing"
 )
@@ -168,19 +169,23 @@ func FuzzDecodeMetaItemInfoMP4(f *testing.F) {
 		buildIlocIDAT(1, uint32(len(wrapEXIFItemPayload(buildMinimalEXIFASCII(0x0110, "Fuzz Item Model"))))),
 	))
 	f.Add(buildMP4WithMetaIDATItem(
-		[]byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:CreatorTool="Fuzz Tool"/></rdf:RDF></x:xmpmeta>`),
+		buildMinimalXMPPacket("Fuzz Tool"),
 		buildInfeXMP(1),
-		buildIlocIDAT(1, 234),
+		buildIlocIDAT(1, uint32(len(buildMinimalXMPPacket("Fuzz Tool")))),
 	))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		r := bytes.NewReader(data)
-		_, _, err := DecodeAll(Options{
-			R:       r,
-			Sources: EXIF | XMP | MAKERNOTES,
-		})
-		if err != nil && !IsInvalidFormat(err) {
-			t.Errorf("expected InvalidFormatError, got: %T: %v", err, err)
+		for _, reader := range []io.Reader{
+			bytes.NewReader(data),
+			readerOnly{bytes.NewReader(data)},
+		} {
+			_, _, err := DecodeAll(Options{
+				R:       reader,
+				Sources: EXIF | XMP | MAKERNOTES,
+			})
+			if err != nil && !IsInvalidFormat(err) {
+				t.Errorf("expected InvalidFormatError, got: %T: %v", err, err)
+			}
 		}
 	})
 }

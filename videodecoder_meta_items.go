@@ -2,6 +2,7 @@ package videometa
 
 import (
 	"bytes"
+	"math"
 	"sort"
 )
 
@@ -296,8 +297,12 @@ func (d *videoDecoderMP4) decodeMetaItems(ctx *metaItemContext) {
 			d.warnMetaItem("can't currently extract file-offset %s item %d from a non-seekable reader", item.typeName(), itemID)
 			continue
 		}
-		if item.constructionMethod == 1 && ctx.idatOffset == 0 && len(ctx.idatData) == 0 {
+		if item.constructionMethod == 1 && ctx.idatSize == 0 && len(ctx.idatData) == 0 {
 			d.warnMetaItem("missing idat for %s item %d with construction method 1", item.typeName(), itemID)
+			continue
+		}
+		if item.constructionMethod == 1 && !d.canSeek && len(ctx.idatData) == 0 {
+			d.warnMetaItem("can't currently extract idat-backed %s item %d from a non-seekable reader without buffered idat data", item.typeName(), itemID)
 			continue
 		}
 
@@ -348,29 +353,77 @@ func (d *videoDecoderMP4) readMetaItemPayload(ctx *metaItemContext, item *metaIt
 }
 
 func (d *videoDecoderMP4) readMetaItemExtent(ctx *metaItemContext, item *metaItemInfo, extent metaItemExtent) ([]byte, bool) {
-	if item.constructionMethod == 1 && len(ctx.idatData) > 0 {
-		start := item.baseOffset + extent.offset
-		end := start + extent.length
-		if end < start || end > uint64(len(ctx.idatData)) {
-			d.warnMetaItem("idat extent for %s item exceeds available idat data", item.typeName())
+	if item.constructionMethod == 1 {
+		relativeStart, relativeEnd, absoluteStart, ok := d.idatExtentRange(ctx, item, extent)
+		if !ok {
 			return nil, false
 		}
-		return append([]byte(nil), ctx.idatData[start:end]...), true
+		if len(ctx.idatData) > 0 {
+			if relativeEnd > uint64(len(ctx.idatData)) {
+				d.warnMetaItem("idat extent for %s item exceeds available idat data", item.typeName())
+				return nil, false
+			}
+			return append([]byte(nil), ctx.idatData[relativeStart:relativeEnd]...), true
+		}
+		if !d.canSeek {
+			d.warnMetaItem("can't currently extract idat-backed %s item from a non-seekable reader without buffered idat data", item.typeName())
+			return nil, false
+		}
+
+		d.seek(int64(absoluteStart))
+		return d.readBytes(int(extent.length)), true
 	}
 
-	base := item.baseOffset
-	if item.constructionMethod == 1 {
-		base += uint64(ctx.idatOffset)
-	}
-	start := base + extent.offset
-	end := start + extent.length
-	if end < start || end > uint64(^uint(0)>>1) {
-		d.warnMetaItem("invalid extent range for %s item", item.typeName())
+	start, _, ok := d.metaItemExtentRange(item.typeName(), item.baseOffset, extent.offset, extent.length)
+	if !ok {
 		return nil, false
 	}
 
 	d.seek(int64(start))
 	return d.readBytes(int(extent.length)), true
+}
+
+func (d *videoDecoderMP4) metaItemExtentRange(typeName string, baseOffset uint64, extentOffset uint64, extentLength uint64) (start uint64, end uint64, ok bool) {
+	if baseOffset > math.MaxUint64-extentOffset {
+		d.warnMetaItem("invalid extent range for %s item", typeName)
+		return 0, 0, false
+	}
+	start = baseOffset + extentOffset
+	if start > math.MaxUint64-extentLength {
+		d.warnMetaItem("invalid extent range for %s item", typeName)
+		return 0, 0, false
+	}
+	end = start + extentLength
+	if end > math.MaxInt64 {
+		d.warnMetaItem("invalid extent range for %s item", typeName)
+		return 0, 0, false
+	}
+	return start, end, true
+}
+
+func (d *videoDecoderMP4) idatExtentRange(ctx *metaItemContext, item *metaItemInfo, extent metaItemExtent) (relativeStart uint64, relativeEnd uint64, absoluteStart uint64, ok bool) {
+	relativeStart, relativeEnd, ok = d.metaItemExtentRange(item.typeName(), item.baseOffset, extent.offset, extent.length)
+	if !ok {
+		return 0, 0, 0, false
+	}
+	if relativeEnd > ctx.idatSize {
+		d.warnMetaItem("idat extent for %s item exceeds idat box bounds", item.typeName())
+		return 0, 0, 0, false
+	}
+	if ctx.idatOffset < 0 {
+		d.warnMetaItem("invalid extent range for %s item", item.typeName())
+		return 0, 0, 0, false
+	}
+	if uint64(ctx.idatOffset) > math.MaxUint64-relativeStart {
+		d.warnMetaItem("invalid extent range for %s item", item.typeName())
+		return 0, 0, 0, false
+	}
+	absoluteStart = uint64(ctx.idatOffset) + relativeStart
+	if absoluteStart > math.MaxInt64 {
+		d.warnMetaItem("invalid extent range for %s item", item.typeName())
+		return 0, 0, 0, false
+	}
+	return relativeStart, relativeEnd, absoluteStart, true
 }
 
 func (d *videoDecoderMP4) decodeEXIFFromMetaItem(data []byte) {

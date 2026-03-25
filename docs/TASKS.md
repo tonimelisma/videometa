@@ -21,6 +21,8 @@ Tasks organized by milestone. Each task traces to requirements (`REQ-*`) and arc
 | M13: Fix Weak Tests | ✅ Complete |
 | M14: Test & Error Robustness | ✅ Complete |
 | M15: Test & IO Cleanup | ✅ Complete |
+| M16: Integrity Recovery | ✅ Complete |
+| M17: Oracle Evidence Hardening | ✅ Complete |
 
 ---
 
@@ -163,3 +165,17 @@ Truthfulness fixes after audit: align docs and validation with the real parser, 
 | TASK-M16-04 | Add dedicated fuzz coverage for item-info parsing and MakerNotes dispatch | ✅ Complete | videometa_fuzz_test.go |
 | TASK-M16-05 | Tighten latency assertion to the documented `<500us` target | ✅ Complete | videometa_bench_test.go |
 | TASK-M16-06 | Update requirements, architecture, traceability, and README/CLAUDE status claims to match implementation | ✅ Complete | docs/, README.md, CLAUDE.md |
+
+---
+
+## Milestone 17: Oracle Evidence Hardening
+
+Truthfulness fixes after the integrity recovery increment: generate the full EXIF field reference, harden `idat` extraction, and separate `Validated` from `Covered` traceability.
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M17-01 | Generate EXIF field tables from committed reference manifest (`582/32/5`) | ✅ Complete | gen/, metadecoder_exif_fields.go, exif_fields_reference_test.go |
+| TASK-M17-02 | Fix `idat` buffering for non-seekable `meta/iloc` extraction and enforce `idat` extent bounds | ✅ Complete | videodecoder_mp4.go, videodecoder_meta_items.go |
+| TASK-M17-03 | Add temp-file exiftool oracle tests for `meta/iloc` EXIF/XMP and XMP UUID routes | ✅ Complete | videometa_oracle_test.go, testhelpers_test.go |
+| TASK-M17-04 | Reject Canon `Canon\\0\\0\\0` MakerNotes preamble with warning, matching exiftool’s rejection | ✅ Complete | metadecoder_makernotes_canon.go, videometa_oracle_test.go |
+| TASK-M17-05 | Update requirements, architecture, CI, and traceability statuses to distinguish `Validated` from `Covered` honestly | ✅ Complete | docs/, .github/workflows/ci.yml |

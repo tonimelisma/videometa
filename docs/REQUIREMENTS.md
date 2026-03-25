@@ -89,7 +89,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-EXIF-01 | Decode EXIF IFD structures (IFD0, IFD1, ExifIFD, GPSInfoIFD, InteropIFD) |
 | REQ-EXIF-02 | Handle both big-endian and little-endian byte order |
 | REQ-EXIF-03 | Support all standard EXIF types (BYTE through DOUBLE) |
-| REQ-EXIF-04 | Core EXIF field reference: 111 EXIF tags, 32 GPS tags, 5 Interop tags with exact committed names (D-05) |
+| REQ-EXIF-04 | Core EXIF field reference generated from `gen/exif_fields_reference.json`: 582 EXIF tags, 32 GPS tags, 5 Interop tags with exact exiftool 13.50 names (D-05) |
 | REQ-EXIF-05 | Value converters matching exiftool behavior (APEX-to-f-number, GPS degrees-to-decimal, etc.) |
 | REQ-EXIF-06 | Locate EXIF in MP4 via UUID box or meta/iloc items |
 | REQ-EXIF-07 | Apple MakerNotes decoding (D-06, D-07) |
@@ -103,7 +103,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-XMP-01 | Decode XMP/RDF XML (attributes, seq/bag/alt lists) |
 | REQ-XMP-02 | Handle namespace URIs |
 | REQ-XMP-03 | Parse GPS coordinates from XMP format (DMS and decimal) |
-| REQ-XMP-04 | Locate XMP in MP4 via UUID box (BE7ACFCB-97A9-42E8-9C71-999491E3AFAC), meta/xml, or meta/iloc items |
+| REQ-XMP-04 | Locate XMP in MP4 via UUID box (BE7ACFCB-97A9-42E8-9C71-999491E3AFAC), `udta/XMP_`, or meta/iloc items |
 | REQ-XMP-05 | Main XMP packet only; skip extended XMP (D-18) |
 | REQ-XMP-06 | Support HandleXMP escape hatch |
 
@@ -178,6 +178,11 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 
 Mapping REQ-* → ARCH-* → source file → test file. Updated as implementation proceeds.
 
+Status terms used below:
+- `Validated`: fully backed by the cited tests. For metadata parity paths, this means committed exiftool golden tests or generated temp-file exiftool oracle tests.
+- `Covered`: exported-path deterministic tests exist, but live exiftool parity evidence is still incomplete for at least one claimed route or vendor.
+- `Static`, `Config`, and `Pending` keep their usual meanings.
+
 | Requirement | Architecture | Source File | Test File | Status |
 |-------------|-------------|-------------|-----------|--------|
 | REQ-API-01 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
@@ -209,16 +214,16 @@ Mapping REQ-* → ARCH-* → source file → test file. Updated as implementatio
 | REQ-EXIF-01 | ARCH-DEC-02 | metadecoder_exif.go | metadecoder_exif_test.go | Validated |
 | REQ-EXIF-02 | ARCH-DEC-02, ARCH-IO-02 | metadecoder_exif.go, io.go | metadecoder_exif_test.go | Validated |
 | REQ-EXIF-03 | ARCH-DEC-02 | metadecoder_exif.go | metadecoder_exif_test.go | Validated |
-| REQ-EXIF-04 | ARCH-DEC-02 | metadecoder_exif_fields.go | videometa_test.go | Validated |
+| REQ-EXIF-04 | ARCH-DEC-02 | metadecoder_exif_fields.go | exif_fields_reference_test.go | Validated |
 | REQ-EXIF-05 | ARCH-DEC-06 | metadecoder_exif.go, helpers.go | metadecoder_exif_test.go, helpers_test.go | Validated |
-| REQ-EXIF-06 | ARCH-BOX-04 | videodecoder_mp4.go, videodecoder_meta_items.go | videometa_test.go, videometa_meta_items_test.go | Validated |
-| REQ-EXIF-07 | ARCH-DEC-08 | metadecoder_makernotes.go, metadecoder_makernotes_apple.go | metadecoder_makernotes_test.go | Validated |
-| REQ-EXIF-08 | ARCH-DEC-08 | metadecoder_makernotes.go, metadecoder_makernotes_canon.go | metadecoder_makernotes_test.go | Validated |
-| REQ-EXIF-09 | ARCH-DEC-08 | metadecoder_makernotes.go, metadecoder_makernotes_sony.go | metadecoder_makernotes_test.go | Validated |
+| REQ-EXIF-06 | ARCH-BOX-04 | videodecoder_mp4.go, videodecoder_meta_items.go | videometa_test.go, videometa_meta_items_test.go, videometa_oracle_test.go | Validated (meta/iloc); Covered (UUID) |
+| REQ-EXIF-07 | ARCH-DEC-08 | metadecoder_makernotes.go, metadecoder_makernotes_apple.go | metadecoder_makernotes_test.go | Covered |
+| REQ-EXIF-08 | ARCH-DEC-08 | metadecoder_makernotes.go, metadecoder_makernotes_canon.go | metadecoder_makernotes_test.go, videometa_oracle_test.go | Covered |
+| REQ-EXIF-09 | ARCH-DEC-08 | metadecoder_makernotes.go, metadecoder_makernotes_sony.go | metadecoder_makernotes_test.go | Covered |
 | REQ-XMP-01 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
 | REQ-XMP-02 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
 | REQ-XMP-03 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
-| REQ-XMP-04 | ARCH-BOX-04 | videodecoder_mp4.go, videodecoder_meta_items.go | videometa_golden_test.go, videometa_meta_items_test.go | Validated |
+| REQ-XMP-04 | ARCH-BOX-04 | videodecoder_mp4.go, videodecoder_meta_items.go | videometa_golden_test.go, videometa_meta_items_test.go, videometa_oracle_test.go | Validated |
 | REQ-XMP-05 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
 | REQ-XMP-06 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
 | REQ-IPTC-01 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go | Validated |
@@ -240,7 +245,7 @@ Mapping REQ-* → ARCH-* → source file → test file. Updated as implementatio
 | REQ-NF-01 | ARCH-IO-01 | io.go | io_test.go | Validated |
 | REQ-NF-02 | ARCH-IO-04 | io.go | videometa_bench_test.go | Validated |
 | REQ-NF-03 | ARCH-TEST-06 | videometa_bench_test.go | videometa_bench_test.go | Validated |
-| REQ-NF-04 | ARCH-TEST-01 | gen/main.go | videometa_golden_test.go | Validated |
+| REQ-NF-04 | ARCH-TEST-01 | gen/main.go | videometa_golden_test.go, videometa_oracle_test.go | Validated |
 | REQ-NF-05 | ARCH-TEST-05 | videometa_fuzz_test.go | videometa_fuzz_test.go | Validated |
 | REQ-NF-06 | ARCH-ERR-01 | helpers.go | videometa_test.go, helpers_test.go | Validated |
 | REQ-NF-07 | — | go.mod | — | Static |

@@ -980,18 +980,37 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
 				}
 			}
 		case "idat":
+			idatOffset := d.pos()
+			idatSize := boxSize - uint64(d.pos()-startPos)
+			var idatData []byte
+			readIDAT := func() []byte {
+				if idatData != nil {
+					return idatData
+				}
+				if idatSize == 0 {
+					idatData = []byte{}
+					return idatData
+				}
+				if idatSize > maxMetaItemPayload {
+					if itemCtx != nil {
+						d.warnMetaItem("skipping idat box larger than %d bytes", maxMetaItemPayload)
+					}
+					return nil
+				}
+				idatData = d.readBytes(int(idatSize))
+				return idatData
+			}
 			if itemCtx != nil {
-				itemCtx.idatOffset = d.pos()
-				itemCtx.idatSize = boxSize - uint64(d.pos()-startPos)
+				itemCtx.idatOffset = idatOffset
+				itemCtx.idatSize = idatSize
+				if !d.canSeek {
+					itemCtx.idatData = append([]byte(nil), readIDAT()...)
+				}
 			}
 			// Sony NRTM: XML may be embedded in idat within the meta box.
 			if handlerType == "nrtm" && d.opts.Sources.Has(XML) {
-				dataLen := int(boxSize) - 8
-				if dataLen > 0 && dataLen < 1024*1024 {
-					data := d.readBytes(dataLen)
-					if itemCtx != nil {
-						itemCtx.idatData = append([]byte(nil), data...)
-					}
+				data := readIDAT()
+				if len(data) > 0 && len(data) < 1024*1024 {
 					xmlData := scanForXMLInMeta(data)
 					if xmlData != nil {
 						d.decodeSonyNRTM(bytes.NewReader(xmlData))

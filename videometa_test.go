@@ -598,57 +598,6 @@ func TestQuickTimeCreationDateTimezone(t *testing.T) {
 		qt.Commentf("CreationDate should preserve timezone, got %q", cdStr))
 }
 
-// Validates: REQ-EXIF-04
-func TestEXIFFieldTables(t *testing.T) {
-	c := qt.New(t)
-
-	c.Assert(len(exifFields), qt.Equals, 111)
-	c.Assert(len(exifFieldsGPS), qt.Equals, 32)
-	c.Assert(len(exifInteropFields), qt.Equals, 5)
-
-	exifExpected := map[uint16]string{
-		0x010F: "Make",
-		0x0110: "Model",
-		0x0132: "ModifyDate",
-		0x829A: "ExposureTime",
-		0x829D: "FNumber",
-		0x8827: "ISO",
-		0x9003: "DateTimeOriginal",
-		0x9204: "ExposureCompensation",
-		0x927C: "MakerNotes",
-		0xA002: "ExifImageWidth",
-		0xA003: "ExifImageHeight",
-		0xA432: "LensInfo",
-		0xA434: "LensModel",
-		0xA435: "LensSerialNumber",
-	}
-	for tagID, expectedName := range exifExpected {
-		c.Assert(exifFields[tagID], qt.Equals, expectedName)
-	}
-
-	gpsExpected := map[uint16]string{
-		0x0002: "GPSLatitude",
-		0x0004: "GPSLongitude",
-		0x0006: "GPSAltitude",
-		0x001D: "GPSDateStamp",
-		0x001F: "GPSHPositioningError",
-	}
-	for tagID, expectedName := range gpsExpected {
-		c.Assert(exifFieldsGPS[tagID], qt.Equals, expectedName)
-	}
-
-	interopExpected := map[uint16]string{
-		0x0001: "InteropIndex",
-		0x0002: "InteropVersion",
-		0x1000: "RelatedImageFileFormat",
-		0x1001: "RelatedImageWidth",
-		0x1002: "RelatedImageHeight",
-	}
-	for tagID, expectedName := range interopExpected {
-		c.Assert(exifInteropFields[tagID], qt.Equals, expectedName)
-	}
-}
-
 func TestDecodeMakerNotesUnknownManufacturerWarns(t *testing.T) {
 	c := qt.New(t)
 

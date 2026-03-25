@@ -36,9 +36,9 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-FILE-01 | `videometa.go` | Public API: Decode, DecodeAll, Options, TagInfo, Tags, Source, VideoFormat, DecodeResult, VideoConfig | REQ-API-* |
 | ARCH-FILE-02 | `io.go` | streamReader: binary reads, byte-order, seek, buffer pool, panic control flow | REQ-NF-01, REQ-NF-02 |
 | ARCH-FILE-03 | `videodecoder_mp4.go` | ISOBMFF box parser + metadata routing | REQ-BOX-* |
-| ARCH-FILE-03A | `videodecoder_meta_items.go` | `meta/iloc` item parsing and EXIF/XMP item extraction | REQ-EXIF-06, REQ-XMP-04 |
+| ARCH-FILE-03A | `videodecoder_meta_items.go` | `meta/iloc` item parsing, `idat` construction-method validation, non-seekable `idat` buffering, and EXIF/XMP item extraction | REQ-EXIF-06, REQ-XMP-04 |
 | ARCH-FILE-04 | `metadecoder_exif.go` | EXIF IFD parser | REQ-EXIF-01..06 |
-| ARCH-FILE-05 | `metadecoder_exif_fields.go` | EXIF/GPS/Interop tag name tables (111/32/5 committed reference) | REQ-EXIF-04 |
+| ARCH-FILE-05 | `metadecoder_exif_fields.go` | Generated EXIF/GPS/Interop tag name tables from `gen/exif_fields_reference.json` (582/32/5 committed reference) | REQ-EXIF-04 |
 | ARCH-FILE-06 | `metadecoder_xmp.go` | XMP/RDF XML parser | REQ-XMP-* |
 | ARCH-FILE-07 | `metadecoder_iptc.go` | IPTC record parser + field definitions (inline) | REQ-IPTC-* |
 | ARCH-FILE-08 | `metadecoder_quicktime.go` | QuickTime ilst/freeform parser, locale handling, tag name tables | REQ-QT-* |
@@ -49,7 +49,7 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-FILE-09D | `metadecoder_makernotes_pentax.go` | Pentax `TAGS` QuickTime metadata | REQ-QT-* |
 | ARCH-FILE-10 | `metadecoder_sony_nrtm.go` | Sony NonRealTimeMeta XML parser (XAVC metadata) | REQ-QT-08 |
 | ARCH-FILE-11 | `helpers.go` | Rat[T], InvalidFormatError, value converters, ISO6709 parser | REQ-QT-06, REQ-NF-06 |
-| ARCH-FILE-12 | `gen/main.go` | Golden file generator (runs exiftool) | REQ-NF-04 |
+| ARCH-FILE-12 | `gen/main.go` | Golden file generator and EXIF field-table generator | REQ-NF-04 |
 | ARCH-FILE-13 | `testdata/` | Test video files + golden JSON | REQ-TEST-* |
 | ARCH-FILE-14 | `.github/workflows/ci.yml` | CI with exiftool validation | REQ-NF-10 |
 
@@ -62,7 +62,7 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-BOX-01 | Recursive descent over known container boxes (`moov`, `trak`, `mdia`, `minf`, `stbl`, `udta`, `meta`) with bounded depth | Keeps code local to each container while preserving streaming behavior | REQ-BOX-01..05, REQ-NF-06 |
 | ARCH-BOX-02 | `readBoxHeader()` returns `(totalSize, fourcc, isEOF)` | Core primitive for all box navigation | REQ-BOX-01..04 |
 | ARCH-BOX-03 | Skip mdat by seeking (ReadSeeker) or read+discard (Reader) | mdat can be gigabytes | REQ-BOX-05, REQ-API-03 |
-| ARCH-BOX-04 | Routing by container context plus metadata sub-box handlers (`uuid`, `meta`, `iloc`, `iinf`, `pitm`, `idat`, `ilst`) | Covers EXIF/XMP UUID paths, item-info paths, and QuickTime metadata | REQ-BOX-07, REQ-BOX-08 |
+| ARCH-BOX-04 | Routing by container context plus metadata sub-box handlers (`uuid`, `meta`, `iloc`, `iinf`, `pitm`, `idat`, `ilst`) | Covers EXIF/XMP UUID paths, item-info paths, and QuickTime metadata; `construction method 1` reads are range-checked against `idat` and buffered for non-seekable readers | REQ-BOX-07, REQ-BOX-08 |
 | ARCH-BOX-05 | ftyp validation: check major brand and compatible brands | Detect MOV vs MP4 internally | REQ-BOX-06, REQ-API-04 |
 
 ### Box Path Routing Table
@@ -106,6 +106,8 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-DEC-07 | Tag names match exiftool output exactly | D-09 | REQ-QT-07 |
 | ARCH-DEC-08 | MakerNotes: per-manufacturer Go files with embedded tag tables | Clean separation, easy to add more manufacturers | REQ-EXIF-07..09 |
 
+Canon MakerNotes stay anchored at offset `0`. Payloads prefixed with `Canon\0\0\0` are rejected with a warning instead of being blindly skipped because `exiftool 13.50` rejects that preamble too.
+
 ### Single Package Design
 
 All code lives in one `videometa` package (no subpackages), following imagemeta's pattern. This keeps the API simple and avoids import cycles.
@@ -140,11 +142,11 @@ All code lives in one `videometa` package (no subpackages), following imagemeta'
 
 | ID | Design element | Traces to |
 |----|----------------|-----------|
-| ARCH-TEST-01 | `go generate ./gen` runs exiftool on test videos, saves JSON to testdata/ | REQ-NF-04 |
-| ARCH-TEST-02 | Tests compare videometa output against committed golden JSON | REQ-NF-04 |
-| ARCH-TEST-03 | CI runs exiftool live and diffs against committed golden files | REQ-NF-10 |
+| ARCH-TEST-01 | `go generate ./gen` runs exiftool on committed test videos and regenerates EXIF field tables from the committed manifest | REQ-NF-04 |
+| ARCH-TEST-02 | Tests compare videometa output against committed golden JSON and generated temp-file exiftool oracle output | REQ-NF-04 |
+| ARCH-TEST-03 | CI runs `go generate ./gen` and diffs both golden JSON and generated EXIF field tables | REQ-NF-10 |
 | ARCH-TEST-04 | Normalization rules for comparison: float precision, string trimming, type coercion | REQ-NF-04 |
-| ARCH-TEST-05 | Dedicated fuzz targets for full MP4 decode, EXIF/XMP/IPTC, `meta` item parsing, and MakerNotes dispatch | REQ-NF-05 |
+| ARCH-TEST-05 | Dedicated fuzz targets for full MP4 decode, EXIF/XMP/IPTC, `meta` item parsing on seekable and non-seekable readers, and MakerNotes dispatch | REQ-NF-05 |
 | ARCH-TEST-06 | Benchmarks: per-source, all-sources, per-file-type | REQ-NF-03 |
 
 ---
@@ -164,7 +166,7 @@ All code lives in one `videometa` package (no subpackages), following imagemeta'
 | Decision | Rationale |
 |----------|-----------|
 | Single package, no subpackages | Follows imagemeta; simpler API |
-| Iterative box traversal (ARCH-BOX-01) | Prevents stack overflow on pathological files |
+| Recursive descent over known container boxes (ARCH-BOX-01) | Keeps each container parser local while depth remains bounded in real files |
 | Seek past mdat (ARCH-BOX-03) | mdat is AV data, can be gigabytes |
 | Panic-based control flow (ARCH-IO-03) | Readable decoder code; recovered at boundary |
 | exiftool as reference, not imagemeta (ARCH-DEC-06) | More complete edge case handling |

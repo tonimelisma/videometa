@@ -37,10 +37,9 @@ jobs:
 
       - name: Validate golden files
         run: |
-          cd gen && go run main.go
-          cd ..
-          if ! git diff --quiet testdata/*.exiftool.json; then
-            echo "Golden files are out of date. Run 'cd gen && go run main.go' and commit."
-            git diff testdata/*.exiftool.json
+          go generate ./gen
+          if ! git diff --quiet -- testdata/*.exiftool.json metadecoder_exif_fields.go; then
+            echo "Generated artifacts are out of date. Run 'go generate ./gen' and commit."
+            git diff -- testdata/*.exiftool.json metadecoder_exif_fields.go
             exit 1
           fi
