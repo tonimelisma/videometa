@@ -146,6 +146,10 @@ func formatTimeForGolden(t time.Time) string {
 // goldenGroupTags returns the videometa tags for a given exiftool group name.
 func goldenGroupTags(tags Tags, group string) map[string]TagInfo {
 	switch group {
+	case "EXIF":
+		return tags.EXIF()
+	case "IPTC":
+		return tags.IPTC()
 	case "QuickTime":
 		return tags.QuickTime()
 	case "MakerNotes":
