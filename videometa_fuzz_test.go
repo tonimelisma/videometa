@@ -154,3 +154,98 @@ func FuzzDecodeIPTC(f *testing.F) {
 		d.decodeIPTC(bytes.NewReader(data))
 	})
 }
+
+// Validates: REQ-NF-05
+func FuzzDecodeMetaItemInfoMP4(f *testing.F) {
+	f.Add(buildMP4WithMetaFileItem(
+		wrapEXIFItemPayload(buildMinimalEXIFASCII(0x010F, "Fuzz Item EXIF")),
+		buildInfeEXIF(1),
+		buildIlocFileOffset(1, 0, uint32(len(wrapEXIFItemPayload(buildMinimalEXIFASCII(0x010F, "Fuzz Item EXIF"))))),
+	))
+	f.Add(buildMP4WithMetaIDATItem(
+		wrapEXIFItemPayload(buildMinimalEXIFASCII(0x0110, "Fuzz Item Model")),
+		buildInfeEXIF(1),
+		buildIlocIDAT(1, uint32(len(wrapEXIFItemPayload(buildMinimalEXIFASCII(0x0110, "Fuzz Item Model"))))),
+	))
+	f.Add(buildMP4WithMetaIDATItem(
+		[]byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:CreatorTool="Fuzz Tool"/></rdf:RDF></x:xmpmeta>`),
+		buildInfeXMP(1),
+		buildIlocIDAT(1, 234),
+	))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		r := bytes.NewReader(data)
+		_, _, err := DecodeAll(Options{
+			R:       r,
+			Sources: EXIF | XMP | MAKERNOTES,
+		})
+		if err != nil && !IsInvalidFormat(err) {
+			t.Errorf("expected InvalidFormatError, got: %T: %v", err, err)
+		}
+	})
+}
+
+// Validates: REQ-NF-05
+func FuzzDecodeAppleMakerNotes(f *testing.F) {
+	f.Add(buildAppleMakerNotePayload("FUZZ-APPLE"))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		bd := &baseDecoder{
+			streamReader: newStreamReader(bytes.NewReader(nil)),
+			opts: Options{
+				Sources:   MAKERNOTES,
+				HandleTag: func(TagInfo) error { return nil },
+			},
+			result: &DecodeResult{},
+		}
+		d := &videoDecoderMP4{baseDecoder: bd}
+		d.decodeMakerNotes(data, makerNoteContext{
+			byteOrder: binary.BigEndian,
+			make:      "Apple",
+		})
+	})
+}
+
+// Validates: REQ-NF-05
+func FuzzDecodeCanonMakerNotes(f *testing.F) {
+	f.Add(buildCanonMakerNotePayload())
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		bd := &baseDecoder{
+			streamReader: newStreamReader(bytes.NewReader(nil)),
+			opts: Options{
+				Sources:   MAKERNOTES,
+				HandleTag: func(TagInfo) error { return nil },
+			},
+			result: &DecodeResult{},
+		}
+		d := &videoDecoderMP4{baseDecoder: bd}
+		d.decodeMakerNotes(data, makerNoteContext{
+			byteOrder: binary.BigEndian,
+			make:      "Canon",
+			model:     "EOS R5",
+		})
+	})
+}
+
+// Validates: REQ-NF-05
+func FuzzDecodeSonyMakerNotes(f *testing.F) {
+	f.Add(buildSonyMakerNotePayload())
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		bd := &baseDecoder{
+			streamReader: newStreamReader(bytes.NewReader(nil)),
+			opts: Options{
+				Sources:   MAKERNOTES,
+				HandleTag: func(TagInfo) error { return nil },
+			},
+			result: &DecodeResult{},
+		}
+		d := &videoDecoderMP4{baseDecoder: bd}
+		d.decodeMakerNotes(data, makerNoteContext{
+			byteOrder: binary.BigEndian,
+			make:      "SONY",
+			model:     "ILCE-7M4",
+		})
+	})
+}

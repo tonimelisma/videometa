@@ -942,6 +942,10 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
 	// Track the handler type and keys for mdta-style metadata.
 	var handlerType string
 	var keysTable []string
+	var itemCtx *metaItemContext
+	if d.opts.Sources.Has(EXIF | XMP) {
+		itemCtx = newMetaItemContext()
+	}
 
 	for d.pos() < metaEnd {
 		startPos := d.pos()
@@ -953,6 +957,18 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
 		switch boxType.String() {
 		case "hdlr":
 			handlerType = d.decodeMetaHdlrReturn(startPos, boxSize)
+		case "iloc":
+			if itemCtx != nil {
+				d.decodeMetaIloc(startPos, boxSize, itemCtx)
+			}
+		case "iinf":
+			if itemCtx != nil {
+				d.decodeMetaIinf(startPos, boxSize, itemCtx)
+			}
+		case "pitm":
+			if itemCtx != nil {
+				d.decodeMetaPitm(startPos, boxSize, itemCtx)
+			}
 		case "keys":
 			keysTable = d.decodeKeysBox(startPos, boxSize)
 		case "ilst":
@@ -964,11 +980,18 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
 				}
 			}
 		case "idat":
+			if itemCtx != nil {
+				itemCtx.idatOffset = d.pos()
+				itemCtx.idatSize = boxSize - uint64(d.pos()-startPos)
+			}
 			// Sony NRTM: XML may be embedded in idat within the meta box.
 			if handlerType == "nrtm" && d.opts.Sources.Has(XML) {
 				dataLen := int(boxSize) - 8
 				if dataLen > 0 && dataLen < 1024*1024 {
 					data := d.readBytes(dataLen)
+					if itemCtx != nil {
+						itemCtx.idatData = append([]byte(nil), data...)
+					}
 					xmlData := scanForXMLInMeta(data)
 					if xmlData != nil {
 						d.decodeSonyNRTM(bytes.NewReader(xmlData))
@@ -991,6 +1014,10 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
+	}
+
+	if itemCtx != nil {
+		d.decodeMetaItems(itemCtx)
 	}
 }
 

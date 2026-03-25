@@ -599,16 +599,57 @@ func TestQuickTimeCreationDateTimezone(t *testing.T) {
 }
 
 // Validates: REQ-EXIF-04
-func TestEXIFFieldTableSize(t *testing.T) {
+func TestEXIFFieldTables(t *testing.T) {
 	c := qt.New(t)
-	c.Assert(len(exifFields) >= 100, qt.IsTrue,
-		qt.Commentf("exifFields has %d entries, expected >= 100", len(exifFields)))
-	c.Assert(len(exifFieldsGPS) >= 30, qt.IsTrue,
-		qt.Commentf("exifFieldsGPS has %d entries, expected >= 30", len(exifFieldsGPS)))
+
+	c.Assert(len(exifFields), qt.Equals, 111)
+	c.Assert(len(exifFieldsGPS), qt.Equals, 32)
+	c.Assert(len(exifInteropFields), qt.Equals, 5)
+
+	exifExpected := map[uint16]string{
+		0x010F: "Make",
+		0x0110: "Model",
+		0x0132: "ModifyDate",
+		0x829A: "ExposureTime",
+		0x829D: "FNumber",
+		0x8827: "ISO",
+		0x9003: "DateTimeOriginal",
+		0x9204: "ExposureCompensation",
+		0x927C: "MakerNotes",
+		0xA002: "ExifImageWidth",
+		0xA003: "ExifImageHeight",
+		0xA432: "LensInfo",
+		0xA434: "LensModel",
+		0xA435: "LensSerialNumber",
+	}
+	for tagID, expectedName := range exifExpected {
+		c.Assert(exifFields[tagID], qt.Equals, expectedName)
+	}
+
+	gpsExpected := map[uint16]string{
+		0x0002: "GPSLatitude",
+		0x0004: "GPSLongitude",
+		0x0006: "GPSAltitude",
+		0x001D: "GPSDateStamp",
+		0x001F: "GPSHPositioningError",
+	}
+	for tagID, expectedName := range gpsExpected {
+		c.Assert(exifFieldsGPS[tagID], qt.Equals, expectedName)
+	}
+
+	interopExpected := map[uint16]string{
+		0x0001: "InteropIndex",
+		0x0002: "InteropVersion",
+		0x1000: "RelatedImageFileFormat",
+		0x1001: "RelatedImageWidth",
+		0x1002: "RelatedImageHeight",
+	}
+	for tagID, expectedName := range interopExpected {
+		c.Assert(exifInteropFields[tagID], qt.Equals, expectedName)
+	}
 }
 
-// Validates: REQ-EXIF-07, REQ-EXIF-08, REQ-EXIF-09
-func TestDecodeMakerNotesRouting(t *testing.T) {
+func TestDecodeMakerNotesUnknownManufacturerWarns(t *testing.T) {
 	c := qt.New(t)
 
 	// Build EXIF with tag 0x927C (MakerNotes) containing arbitrary data.
@@ -634,18 +675,18 @@ func TestDecodeMakerNotesRouting(t *testing.T) {
 	d := &videoDecoderMP4{baseDecoder: bd}
 	d.decodeEXIF(readerSeekerFromBytes(exifData))
 
-	// decodeMakerNotes should fire a warning for unrecognized manufacturer data.
+	// Unknown MakerNotes should fire a warning for unrecognized manufacturer data.
 	c.Assert(len(warnings) > 0, qt.IsTrue,
 		qt.Commentf("expected warning from decodeMakerNotes for unknown manufacturer"))
 	foundExpectedWarning := false
 	for _, w := range warnings {
-		if strings.Contains(w, "EXIF MakerNotes not yet implemented") &&
+		if strings.Contains(w, "unrecognized EXIF MakerNotes payload") &&
 			strings.Contains(w, "16 bytes") {
 			foundExpectedWarning = true
 		}
 	}
 	c.Assert(foundExpectedWarning, qt.IsTrue,
-		qt.Commentf("expected warning about skipping 16 bytes of unimplemented MakerNotes, got: %v", warnings))
+		qt.Commentf("expected warning about unrecognized 16-byte MakerNotes payload, got: %v", warnings))
 
 	// No MAKERNOTES-sourced tags should be emitted for an unknown manufacturer.
 	for _, ti := range emittedTags {

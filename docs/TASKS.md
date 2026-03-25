@@ -89,7 +89,7 @@ Every previously-skipped test implemented. No remaining `t.Skip` except conditio
 | TASK-M12-07 | TestDecodeIPTCCharsets (REQ-IPTC-02) | ✅ Complete | metadecoder_iptc_test.go |
 | TASK-M12-08 | TestDecodeIPTCViaApplicationNotes (REQ-IPTC-04) | ✅ Complete | metadecoder_iptc_test.go, metadecoder_exif_fields.go |
 | TASK-M12-09 | TestDecodeXMPExtendedSkip (REQ-XMP-05) | ✅ Complete | metadecoder_xmp_test.go |
-| TASK-M12-10 | TestDecodeMakerNotesRouting (REQ-EXIF-07/08/09) | ✅ Complete | videometa_test.go, testhelpers_test.go |
+| TASK-M12-10 | Unknown-manufacturer MakerNotes warning coverage | ✅ Complete | videometa_test.go, testhelpers_test.go |
 
 ---
 
@@ -101,10 +101,10 @@ Comprehensive test audit: strengthen all non-specific assertions, fix fuzz error
 |------|-------------|--------|-------|
 | TASK-M13-P1 | Fix `isInvalidFormatErrorCandidate` to match "allocation too large" errors | ✅ Complete | helpers.go |
 | TASK-M13-01 | Fuzz tests assert `IsInvalidFormat` on malformed input errors | ✅ Complete | videometa_fuzz_test.go |
-| TASK-M13-02 | Add `TestDecodeLatencyTarget` (REQ-NF-02, < 2ms ceiling) | ✅ Complete | videometa_bench_test.go |
+| TASK-M13-02 | Add `TestDecodeLatencyTarget` (REQ-NF-02, < 500us ceiling) | ✅ Complete | videometa_bench_test.go |
 | TASK-M13-03 | TestWarnfCallback asserts specific "invalid byte order marker" warning | ✅ Complete | videometa_test.go |
 | TASK-M13-04 | TestBestEffortPartial asserts full decode success (not either/or) | ✅ Complete | videometa_test.go |
-| TASK-M13-05 | TestDecodeMakerNotesRouting asserts warning content + no MAKERNOTES tags | ✅ Complete | videometa_test.go |
+| TASK-M13-05 | TestDecodeMakerNotesUnknownManufacturerWarns asserts warning content + no MAKERNOTES tags | ✅ Complete | videometa_test.go |
 | TASK-M13-06 | TestBoxSkipUnknown asserts no error + ftyp tag emitted | ✅ Complete | videometa_test.go |
 | TASK-M13-07 | TestLimitTagSize three-tier test proving exact > mechanism | ✅ Complete | videometa_test.go |
 
@@ -147,4 +147,19 @@ Consistency fixes for error typing in IO paths, fuzz target documentation, test 
 | TASK-BL-03 | DJI drone MP4 test file + golden test | Pending | testdata/ |
 | TASK-BL-04 | Pro camera MOV test file + golden test | Pending | testdata/ |
 | TASK-BL-05 | 64-bit box size test file | Pending | testdata/ |
-| TASK-BL-06 | EXIF MakerNotes (Apple, Canon, Sony in EXIF IFD) | Pending | metadecoder_makernotes_*.go |
+| TASK-BL-06 | EXIF MakerNotes (Apple, Canon, Sony in EXIF IFD) | ✅ Complete | metadecoder_makernotes*.go |
+
+---
+
+## Milestone 16: Integrity Recovery
+
+Truthfulness fixes after audit: align docs and validation with the real parser, not the previous claims.
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M16-01 | Add `meta/iloc` EXIF/XMP item extraction (`iloc`, `iinf`, `infe`, `pitm`, `idat`) | ✅ Complete | videodecoder_mp4.go, videodecoder_meta_items.go |
+| TASK-M16-02 | Add end-to-end tests for UUID EXIF, `meta/iloc` EXIF, and `meta/iloc` XMP | ✅ Complete | videometa_meta_items_test.go |
+| TASK-M16-03 | Replace EXIF MakerNotes stub with Apple/Canon/Sony dispatch and regression tests | ✅ Complete | metadecoder_makernotes*.go, metadecoder_makernotes_test.go |
+| TASK-M16-04 | Add dedicated fuzz coverage for item-info parsing and MakerNotes dispatch | ✅ Complete | videometa_fuzz_test.go |
+| TASK-M16-05 | Tighten latency assertion to the documented `<500us` target | ✅ Complete | videometa_bench_test.go |
+| TASK-M16-06 | Update requirements, architecture, traceability, and README/CLAUDE status claims to match implementation | ✅ Complete | docs/, README.md, CLAUDE.md |

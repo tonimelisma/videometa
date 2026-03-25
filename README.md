@@ -83,8 +83,9 @@ result, err := videometa.Decode(videometa.Options{
 | `IPTC` | IPTC-IIM records (keywords, captions) |
 | `QUICKTIME` | QuickTime native metadata (ilst atoms, freeform keys) |
 | `CONFIG` | Container structure info (dimensions, duration, codec) |
-| `MAKERNOTES` | Manufacturer-specific metadata (Pentax TAGS atom) |
+| `MAKERNOTES` | Manufacturer-specific metadata (Apple/Canon/Sony EXIF MakerNotes, Pentax `TAGS`) |
 | `XML` | Structured XML metadata (Sony NonRealTimeMeta) |
+| `COMPOSITE` | Derived tags computed from other metadata |
 
 ## Benchmarks
 
@@ -95,7 +96,7 @@ BenchmarkDecodeMinimalMP4ConfigOnly-8     672285    1803 ns/op     608 B/op     
 
 ## Status
 
-v0.1.0 — All decoders implemented: ISOBMFF box parser, EXIF, XMP, IPTC, QuickTime native, Pentax MakerNotes, Sony XAVC (UUID-PROF, USMT/MTDT, NRTM XML), Apple MOV (mdta locales, wave/frma). Zero golden file gaps across all test files. Tested with Sony A6700, iPhone 15 Pro, Pentax, and synthetic test files.
+v0.1.0 development snapshot — ISOBMFF box parser, EXIF, XMP, IPTC, QuickTime native, `meta/iloc` EXIF/XMP item extraction, Apple/Canon/Sony EXIF MakerNotes, Pentax `TAGS`, Sony XAVC (UUID-PROF, USMT/MTDT, NRTM XML), and Apple MOV metadata are implemented. Real-file golden coverage is maintained for the committed fixtures; synthetic end-to-end tests cover the `meta/iloc` and EXIF MakerNotes paths.
 
 ## License
 
