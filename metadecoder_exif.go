@@ -51,6 +51,8 @@ type metaDecoderEXIF struct {
 	*streamReader
 	opts     Options
 	seenIFDs map[int64]bool // Prevent infinite IFD loops.
+	make     string
+	model    string
 
 	// GPS tag accumulation for coordinate conversion.
 	gpsLatRef string
@@ -203,6 +205,19 @@ func (ed *metaDecoderEXIF) decodeTag(d *videoDecoderMP4, namespace string, field
 		return
 	}
 
+	if namespace == "IFD0" {
+		switch tagName {
+		case "Make":
+			if s, ok := value.(string); ok {
+				ed.make = s
+			}
+		case "Model":
+			if s, ok := value.(string); ok {
+				ed.model = s
+			}
+		}
+	}
+
 	// Accumulate GPS fields for later coordinate conversion.
 	if namespace == "GPSInfoIFD" {
 		ed.accumulateGPS(tagID, value)
@@ -223,8 +238,12 @@ func (ed *metaDecoderEXIF) decodeTag(d *videoDecoderMP4, namespace string, field
 
 	// Route MakerNotes (0x927C) to manufacturer-specific decoder.
 	if tagID == 0x927C {
-		if data, ok := value.([]byte); ok {
-			d.decodeMakerNotes(data)
+		if data, ok := value.([]byte); ok && d.opts.Sources.Has(MAKERNOTES) {
+			d.decodeMakerNotes(data, makerNoteContext{
+				byteOrder: ed.byteOrder,
+				make:      ed.make,
+				model:     ed.model,
+			})
 		}
 		return
 	}

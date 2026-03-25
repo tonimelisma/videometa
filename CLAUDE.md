@@ -4,7 +4,7 @@ Go package for reading metadata from video files. Companion to [bep/imagemeta](h
 
 ## Status
 
-**v0.1.0.** All decoders complete: ISOBMFF, EXIF, XMP, IPTC, QuickTime native, Pentax MakerNotes, Sony XAVC (UUID-PROF, USMT/MTDT, NRTM XML), Apple MOV (mdta locales, wave/frma). Zero golden gaps across all test files.
+**v0.1.0.** Implemented decoders: ISOBMFF, EXIF, XMP, IPTC, QuickTime native, `meta/iloc` EXIF/XMP item extraction, Apple/Canon/Sony EXIF MakerNotes, Pentax `TAGS`, Sony XAVC (UUID-PROF, USMT/MTDT, NRTM XML), Apple MOV (mdta locales, wave/frma). Real-file golden coverage is maintained for the committed fixtures; synthetic end-to-end tests cover `meta/iloc` and EXIF MakerNotes paths.
 
 See `INIT.md` for project history. See `docs/` for requirements, architecture, and task plan. See `README.md` for usage.
 

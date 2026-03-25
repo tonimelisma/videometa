@@ -62,18 +62,6 @@ func (d *videoDecoderMP4) decodePentaxTAGS(data []byte) {
 	}
 }
 
-// decodeMakerNotes dispatches EXIF MakerNotes data (tag 0x927C) to
-// manufacturer-specific decoders. Currently a no-op — EXIF MakerNotes
-// require per-manufacturer implementations not yet available.
-func (d *videoDecoderMP4) decodeMakerNotes(data []byte) {
-	if len(data) == 0 {
-		return
-	}
-	if d.opts.Warnf != nil {
-		d.opts.Warnf("decode makernotes: skipping %d bytes (EXIF MakerNotes not yet implemented)", len(data))
-	}
-}
-
 // emitMakerNotesTag sends a MAKERNOTES source tag via the centralized emitTag.
 func (d *videoDecoderMP4) emitMakerNotesTag(name string, value any) {
 	d.emitTag(TagInfo{
