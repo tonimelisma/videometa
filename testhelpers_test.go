@@ -72,6 +72,12 @@ func buildMP4WithMetaIDATItem(itemPayload []byte, infeBox []byte, ilocBox []byte
 	return append(ftyp, meta...)
 }
 
+func buildMP4WithSonyNRTMIDAT(payload []byte) []byte {
+	ftyp := buildFTYPBox()
+	meta := buildMetaBox(buildMetaHdlr("nrtm", "Sony NRTM"), buildBox("idat", payload))
+	return append(ftyp, meta...)
+}
+
 func buildFTYPBox() []byte {
 	var payload bytes.Buffer
 	payload.WriteString("isom")
@@ -104,6 +110,21 @@ func buildPITM(itemID uint16) []byte {
 	payload.Write([]byte{0, 0, 0, 0}) // version + flags
 	_ = binary.Write(&payload, binary.BigEndian, itemID)
 	return buildBox("pitm", payload.Bytes())
+}
+
+func buildMetaHdlr(handlerType string, name string) []byte {
+	var payload bytes.Buffer
+	payload.Write([]byte{0, 0, 0, 0})                       // version + flags
+	_ = binary.Write(&payload, binary.BigEndian, uint32(0)) // pre_defined
+	payload.WriteString(handlerType)
+	_ = binary.Write(&payload, binary.BigEndian, uint32(0)) // vendor
+	_ = binary.Write(&payload, binary.BigEndian, uint32(0)) // reserved
+	_ = binary.Write(&payload, binary.BigEndian, uint32(0)) // reserved
+	if name != "" {
+		payload.WriteString(name)
+	}
+	payload.WriteByte(0)
+	return buildBox("hdlr", payload.Bytes())
 }
 
 func buildInfeEXIF(itemID uint16) []byte {

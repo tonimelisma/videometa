@@ -23,6 +23,7 @@ Tasks organized by milestone. Each task traces to requirements (`REQ-*`) and arc
 | M15: Test & IO Cleanup | ✅ Complete |
 | M16: Integrity Recovery | ✅ Complete |
 | M17: Oracle Evidence Hardening | ✅ Complete |
+| M18: NRTM Streaming Guard | ✅ Complete |
 
 ---
 
@@ -179,3 +180,15 @@ Truthfulness fixes after the integrity recovery increment: generate the full EXI
 | TASK-M17-03 | Add temp-file exiftool oracle tests for `meta/iloc` EXIF/XMP and XMP UUID routes | ✅ Complete | videometa_oracle_test.go, testhelpers_test.go |
 | TASK-M17-04 | Reject Canon `Canon\\0\\0\\0` MakerNotes preamble with warning, matching exiftool’s rejection | ✅ Complete | metadecoder_makernotes_canon.go, videometa_oracle_test.go |
 | TASK-M17-05 | Update requirements, architecture, CI, and traceability statuses to distinguish `Validated` from `Covered` honestly | ✅ Complete | docs/, .github/workflows/ci.yml |
+
+---
+
+## Milestone 18: NRTM Streaming Guard
+
+Follow-up after PR review: keep Sony NRTM XML `idat` scans bounded by the existing 1 MB XML gate so XML-only decode paths do not allocate large `idat` buffers unnecessarily.
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M18-01 | Add public-path regression tests for Sony NRTM XML from `idat` and for large XML-only `idat` skip-on-seek behavior | ✅ Complete | videometa_sony_nrtm_test.go, testhelpers_test.go |
+| TASK-M18-02 | Guard Sony NRTM `idat` XML scans behind the `<1MB` direct-scan limit while preserving `meta/iloc` buffering semantics | ✅ Complete | videodecoder_mp4.go |
+| TASK-M18-03 | Update architecture/task docs to record the bounded NRTM `idat` scan behavior | ✅ Complete | docs/ARCHITECTURE.md, docs/TASKS.md |

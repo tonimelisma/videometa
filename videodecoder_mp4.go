@@ -12,6 +12,8 @@ import (
 // QuickTime epoch: 1904-01-01T00:00:00Z. Offset from Unix epoch.
 const quickTimeEpochOffset = 2082844800
 
+const maxSonyNRTMIDATScan = 1024 * 1024
+
 // UUID constants for extended-type boxes.
 var (
 	profUUID = [16]byte{
@@ -982,6 +984,10 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
 		case "idat":
 			idatOffset := d.pos()
 			idatSize := boxSize - uint64(d.pos()-startPos)
+			shouldScanNRTMIDAT := handlerType == "nrtm" &&
+				d.opts.Sources.Has(XML) &&
+				idatSize > 0 &&
+				idatSize < maxSonyNRTMIDATScan
 			var idatData []byte
 			readIDAT := func() []byte {
 				if idatData != nil {
@@ -1008,9 +1014,9 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64) {
 				}
 			}
 			// Sony NRTM: XML may be embedded in idat within the meta box.
-			if handlerType == "nrtm" && d.opts.Sources.Has(XML) {
+			if shouldScanNRTMIDAT {
 				data := readIDAT()
-				if len(data) > 0 && len(data) < 1024*1024 {
+				if len(data) > 0 {
 					xmlData := scanForXMLInMeta(data)
 					if xmlData != nil {
 						d.decodeSonyNRTM(bytes.NewReader(xmlData))
