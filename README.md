@@ -3,7 +3,7 @@
 [![CI](https://github.com/tonimelisma/videometa/actions/workflows/ci.yml/badge.svg)](https://github.com/tonimelisma/videometa/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/tonimelisma/videometa.svg)](https://pkg.go.dev/github.com/tonimelisma/videometa)
 
-Pure Go library for reading metadata from video files. Extracts EXIF, XMP, IPTC, QuickTime native, MakerNotes, and manufacturer-specific metadata from MP4/MOV containers. All output matches `exiftool -n -json`.
+Pure Go library for reading metadata from video files. Extracts EXIF, XMP, IPTC, QuickTime native, and manufacturer-specific container metadata from MP4/MOV files. All output matches `exiftool -n -json` for the supported video metadata paths.
 
 ## Features
 
@@ -83,7 +83,6 @@ result, err := videometa.Decode(videometa.Options{
 | `IPTC` | IPTC-IIM records (keywords, captions) |
 | `QUICKTIME` | QuickTime native metadata (ilst atoms, freeform keys) |
 | `CONFIG` | Container structure info (dimensions, duration, codec) |
-| `MAKERNOTES` | Manufacturer-specific metadata (Apple/Canon/Sony EXIF MakerNotes, Pentax `TAGS`) |
 | `XML` | Structured XML metadata (Sony NonRealTimeMeta) |
 | `COMPOSITE` | Derived tags computed from other metadata |
 
@@ -96,7 +95,7 @@ BenchmarkDecodeMinimalMP4ConfigOnly-8     672285    1803 ns/op     608 B/op     
 
 ## Status
 
-v0.1.0 development snapshot — ISOBMFF box parser, EXIF, XMP, IPTC, QuickTime native, `meta/iloc` EXIF/XMP item extraction, Apple/Canon/Sony EXIF MakerNotes, Pentax `TAGS`, Sony XAVC (UUID-PROF, USMT/MTDT, NRTM XML), and Apple MOV metadata are implemented. Real-file golden coverage is maintained for the committed fixtures; synthetic end-to-end tests cover the `meta/iloc` and EXIF MakerNotes paths.
+v0.1.0 development snapshot — ISOBMFF box parser, EXIF, XMP, IPTC, QuickTime native, `meta/iloc` EXIF/XMP item extraction, Pentax `TAGS`, Sony XAVC (UUID-PROF, USMT/MTDT, NRTM XML), and Apple MOV metadata are implemented. Real-file golden coverage is maintained for the committed fixtures; synthetic end-to-end tests cover the `meta/iloc` paths.
 
 ## License
 

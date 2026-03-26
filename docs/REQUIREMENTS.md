@@ -12,9 +12,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | D-02 | Tag overlap handling | Report all tags separately (like exiftool); convenience methods deduplicate with priority |
 | D-03 | VideoFormat enum | Single MP4 value; auto-detect MOV vs MP4 internally from ftyp brand |
 | D-04 | Format detection | Optional — auto-detect from ftyp if not specified |
-| D-05 | EXIF tag scope | Committed core EXIF field reference: 111 EXIF tags, 32 GPS tags, 5 Interop tags |
-| D-06 | MakerNotes scope | Apple, Canon, Sony; embedded Go tag tables per manufacturer |
-| D-07 | MakerNotes timing | v1 scope, late milestone |
+| D-05 | EXIF tag scope | Committed core EXIF field reference: 581 EXIF tags, 32 GPS tags, 5 Interop tags |
 | D-08 | Test system | Committed golden JSON + CI validation via GitHub Actions + exiftool |
 | D-09 | QuickTime tag names | Match exiftool exactly |
 | D-10 | Large file handling | Prefer io.ReadSeeker; io.Reader fallback (read+discard for mdat) |
@@ -50,7 +48,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-API-02 | `DecodeAll(Options) (Tags, error)` convenience wrapper | D-19 |
 | REQ-API-03 | `Options.R` accepts `io.ReadSeeker`; `io.Reader` fallback with degraded performance | D-10 |
 | REQ-API-04 | `Options.VideoFormat` optional; auto-detect from ftyp if omitted | D-03, D-04 |
-| REQ-API-05 | `Source` bitmask: `EXIF \| XMP \| IPTC \| QUICKTIME \| CONFIG \| MAKERNOTES \| XML \| COMPOSITE` | — |
+| REQ-API-05 | `Source` bitmask: `EXIF \| XMP \| IPTC \| QUICKTIME \| CONFIG \| XML \| COMPOSITE` | — |
 | REQ-API-06 | `HandleTag` callback receives `TagInfo{Source, Tag, Namespace, Value}` | — |
 | REQ-API-07 | `ShouldHandleTag` filter, `LimitNumTags`, `LimitTagSize` | — |
 | REQ-API-08 | `HandleXMP` escape hatch for custom XMP processing | — |
@@ -89,12 +87,9 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-EXIF-01 | Decode EXIF IFD structures (IFD0, IFD1, ExifIFD, GPSInfoIFD, InteropIFD) |
 | REQ-EXIF-02 | Handle both big-endian and little-endian byte order |
 | REQ-EXIF-03 | Support all standard EXIF types (BYTE through DOUBLE) |
-| REQ-EXIF-04 | Core EXIF field reference generated from `gen/exif_fields_reference.json`: 582 EXIF tags, 32 GPS tags, 5 Interop tags with exact exiftool 13.50 names (D-05) |
+| REQ-EXIF-04 | Core EXIF field reference generated from `gen/exif_fields_reference.json`: 581 EXIF tags, 32 GPS tags, 5 Interop tags with exact exiftool 13.50 names (D-05) |
 | REQ-EXIF-05 | Value converters matching exiftool behavior (APEX-to-f-number, GPS degrees-to-decimal, etc.) |
-| REQ-EXIF-06 | Locate EXIF in MP4 via UUID box or meta/iloc items |
-| REQ-EXIF-07 | Apple MakerNotes decoding (D-06, D-07) |
-| REQ-EXIF-08 | Canon MakerNotes decoding (D-06, D-07) |
-| REQ-EXIF-09 | Sony MakerNotes decoding (D-06, D-07) |
+| REQ-EXIF-06 | Locate EXIF in MP4 via UUID box or meta/iloc items; unsupported embedded vendor image-extension payloads are skipped |
 
 ### XMP (`REQ-XMP-*`)
 
@@ -217,9 +212,6 @@ Status terms used below:
 | REQ-EXIF-04 | ARCH-DEC-02 | metadecoder_exif_fields.go | exif_fields_reference_test.go | Validated |
 | REQ-EXIF-05 | ARCH-DEC-06 | metadecoder_exif.go, helpers.go | metadecoder_exif_test.go, helpers_test.go | Validated |
 | REQ-EXIF-06 | ARCH-BOX-04 | videodecoder_mp4.go, videodecoder_meta_items.go | videometa_test.go, videometa_meta_items_test.go, videometa_oracle_test.go | Validated (meta/iloc); Covered (UUID) |
-| REQ-EXIF-07 | ARCH-DEC-08 | metadecoder_makernotes.go, metadecoder_makernotes_apple.go | metadecoder_makernotes_test.go | Covered |
-| REQ-EXIF-08 | ARCH-DEC-08 | metadecoder_makernotes.go, metadecoder_makernotes_canon.go | metadecoder_makernotes_test.go, videometa_oracle_test.go | Covered |
-| REQ-EXIF-09 | ARCH-DEC-08 | metadecoder_makernotes.go, metadecoder_makernotes_sony.go | metadecoder_makernotes_test.go | Covered |
 | REQ-XMP-01 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
 | REQ-XMP-02 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
 | REQ-XMP-03 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |

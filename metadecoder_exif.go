@@ -236,18 +236,6 @@ func (ed *metaDecoderEXIF) decodeTag(d *videoDecoderMP4, namespace string, field
 		return
 	}
 
-	// Route MakerNotes (0x927C) to manufacturer-specific decoder.
-	if tagID == 0x927C {
-		if data, ok := value.([]byte); ok && d.opts.Sources.Has(MAKERNOTES) {
-			d.decodeMakerNotes(data, makerNoteContext{
-				byteOrder: ed.byteOrder,
-				make:      ed.make,
-				model:     ed.model,
-			})
-		}
-		return
-	}
-
 	d.emitEXIFTag(tagName, namespace, value)
 }
 

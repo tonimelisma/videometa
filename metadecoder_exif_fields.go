@@ -327,7 +327,6 @@ var exifFields = map[uint16]string{
 	0x923B: "CIP3Sheet",
 	0x923C: "CIP3Side",
 	0x923F: "StoNits",
-	0x927C: "MakerNotes",
 	0x9286: "UserComment",
 	0x9290: "SubSecTime",
 	0x9291: "SubSecTimeOriginal",

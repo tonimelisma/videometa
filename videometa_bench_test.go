@@ -95,7 +95,7 @@ func BenchmarkDecodeExifToolQuickTimeMOV(b *testing.B) {
 		r := newBytesReadSeeker(data)
 		_, _, _ = DecodeAll(Options{
 			R:       r,
-			Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG | MAKERNOTES,
+			Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
 		})
 	}
 }

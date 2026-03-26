@@ -46,7 +46,7 @@ func TestDecodePentaxTAGS(t *testing.T) {
 	bd := &baseDecoder{
 		streamReader: newStreamReader(nil),
 		opts: Options{
-			Sources: MAKERNOTES,
+			Sources: QUICKTIME,
 			HandleTag: func(ti TagInfo) error {
 				tags = append(tags, ti)
 				return nil
@@ -61,8 +61,8 @@ func TestDecodePentaxTAGS(t *testing.T) {
 
 	tagMap := make(map[string]any)
 	for _, ti := range tags {
-		c.Assert(ti.Source, qt.Equals, MAKERNOTES)
-		c.Assert(ti.Namespace, qt.Equals, "MakerNotes")
+		c.Assert(ti.Source, qt.Equals, QUICKTIME)
+		c.Assert(ti.Namespace, qt.Equals, "QuickTime")
 		tagMap[ti.Tag] = ti.Value
 	}
 
@@ -83,7 +83,7 @@ func TestDecodePentaxTAGSTooShort(t *testing.T) {
 	bd := &baseDecoder{
 		streamReader: newStreamReader(nil),
 		opts: Options{
-			Sources: MAKERNOTES,
+			Sources: QUICKTIME,
 			HandleTag: func(ti TagInfo) error {
 				c.Fatal("should not emit tags from empty data")
 				return nil

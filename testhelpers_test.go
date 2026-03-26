@@ -226,17 +226,6 @@ func buildMP4WithInvalidEXIF() []byte {
 	return buf.Bytes()
 }
 
-// buildEXIFWithMakerNotes creates an EXIF/TIFF structure with a MakerNotes tag (0x927C).
-func buildEXIFWithMakerNotes(makerNotesData []byte) []byte {
-	return buildTIFFWithEntries([]testEXIFEntry{
-		{
-			tagID: 0x927C,
-			typ:   exifTypeUndef,
-			data:  makerNotesData,
-		},
-	})
-}
-
 // buildEXIFWithIPTC creates an EXIF/TIFF structure with ApplicationNotes tag (0x83BB)
 // containing IPTC data.
 func buildEXIFWithIPTC(iptcData []byte) []byte {
@@ -247,29 +236,6 @@ func buildEXIFWithIPTC(iptcData []byte) []byte {
 			data:  iptcData,
 		},
 	})
-}
-
-func buildEXIFWithMakeModelAndMakerNotes(makeValue, modelValue string, makerNotesData []byte) []byte {
-	entries := []testEXIFEntry{
-		{
-			tagID: 0x010F,
-			typ:   exifTypeASCII,
-			data:  append([]byte(makeValue), 0),
-		},
-	}
-	if modelValue != "" {
-		entries = append(entries, testEXIFEntry{
-			tagID: 0x0110,
-			typ:   exifTypeASCII,
-			data:  append([]byte(modelValue), 0),
-		})
-	}
-	entries = append(entries, testEXIFEntry{
-		tagID: 0x927C,
-		typ:   exifTypeUndef,
-		data:  makerNotesData,
-	})
-	return buildTIFFWithEntries(entries)
 }
 
 func buildTIFFWithEntries(entries []testEXIFEntry) []byte {
@@ -307,119 +273,6 @@ func buildTIFFWithEntries(entries []testEXIFEntry) []byte {
 	}
 
 	return buf[:off]
-}
-
-func buildAppleMakerNotePayload(contentIdentifier string) []byte {
-	header := append([]byte("Apple iOS\x00"), 0x00, 0x00, 0x00, 0x00)
-	payload := make([]byte, 256)
-	copy(payload, header)
-
-	off := len(header)
-	put16 := func(v uint16) {
-		binary.BigEndian.PutUint16(payload[off:], v)
-		off += 2
-	}
-	put32 := func(v uint32) {
-		binary.BigEndian.PutUint32(payload[off:], v)
-		off += 4
-	}
-
-	value := append([]byte(contentIdentifier), 0)
-	put16(1)
-	put16(0x0011)
-	put16(exifTypeASCII)
-	put32(uint32(len(value)))
-	put32(uint32(len(header) + 2 + 12 + 4))
-	put32(0)
-	copy(payload[off:], value)
-	off += len(value)
-
-	return payload[:off]
-}
-
-func buildCanonMakerNotePayload() []byte {
-	cameraSettings := make([]uint16, 34)
-	cameraSettings[6] = 5   // FocusMode
-	cameraSettings[15] = 17 // CameraISO => 100
-	cameraSettings[24] = 10 // FocalUnits
-	cameraSettings[33] = 1  // ImageStabilization
-
-	shotInfo := make([]int16, 22)
-	shotInfo[20] = 0x0080 // FNumber => 4.0
-	shotInfo[21] = 0x0060 // ExposureTime => 1/8
-
-	payload := make([]byte, 256)
-	off := 0
-	put16 := func(v uint16) {
-		binary.BigEndian.PutUint16(payload[off:], v)
-		off += 2
-	}
-	put32 := func(v uint32) {
-		binary.BigEndian.PutUint32(payload[off:], v)
-		off += 4
-	}
-
-	put16(2)
-	put16(0x0001)
-	put16(exifTypeShort)
-	put32(uint32(len(cameraSettings)))
-	put32(30)
-
-	put16(0x0004)
-	put16(exifTypeSShort)
-	put32(uint32(len(shotInfo)))
-	put32(30 + uint32(len(cameraSettings))*2)
-
-	put32(0)
-
-	for _, v := range cameraSettings {
-		put16(v)
-	}
-	for _, v := range shotInfo {
-		put16(uint16(v))
-	}
-
-	return payload[:off]
-}
-
-func buildSonyMakerNotePayload() []byte {
-	header := append([]byte("SONY DSC \x00"), 0x00, 0x00)
-	payload := make([]byte, 256)
-	copy(payload, header)
-
-	off := len(header)
-	put16 := func(v uint16) {
-		binary.BigEndian.PutUint16(payload[off:], v)
-		off += 2
-	}
-	put32 := func(v uint32) {
-		binary.BigEndian.PutUint32(payload[off:], v)
-		off += 4
-	}
-
-	put16(3)
-	put16(0x0102)
-	put16(exifTypeLong)
-	put32(1)
-	put32(5)
-
-	put16(0x0104)
-	put16(exifTypeSRational)
-	put32(1)
-	put32(54)
-
-	put16(0x0115)
-	put16(exifTypeLong)
-	put32(1)
-	put32(0x20)
-
-	put32(0)
-	binary.BigEndian.PutUint32(payload[off:], 1)
-	off += 4
-	binary.BigEndian.PutUint32(payload[off:], 2)
-	off += 4
-
-	return payload[:off]
 }
 
 func buildMinimalXMPPacket(creatorTool string) []byte {

@@ -152,8 +152,6 @@ func goldenGroupTags(tags Tags, group string) map[string]TagInfo {
 		return tags.IPTC()
 	case "QuickTime":
 		return tags.QuickTime()
-	case "MakerNotes":
-		return tags.MakerNotes()
 	case "XMP":
 		return tags.XMP()
 	case "XML":
@@ -176,7 +174,7 @@ func testGoldenExhaustive(c *qt.C, videoPath string, goldenPath string, groups [
 	// Decode with all sources that any group might need.
 	tags, _, err := DecodeAll(Options{
 		R:       f,
-		Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG | MAKERNOTES | XML,
+		Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG | XML,
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -218,7 +216,7 @@ func TestGoldenWithGPS(t *testing.T) {
 func TestGoldenExifToolQuickTimeMOV(t *testing.T) {
 	c := qt.New(t)
 	testGoldenExhaustive(c, "testdata/exiftool_quicktime.mov", "testdata/exiftool_quicktime.mov.exiftool.json",
-		[]string{"QuickTime", "MakerNotes", "XMP", "Composite"})
+		[]string{"QuickTime", "XMP", "Composite"})
 }
 
 // Validates: REQ-NF-04, REQ-QT-04

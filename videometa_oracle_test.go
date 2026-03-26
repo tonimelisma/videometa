@@ -92,25 +92,6 @@ func TestMetaIlocUnsupportedConstructionMethodWarnsAndSkips(t *testing.T) {
 	c.Assert(anyWarningContains(warnings, "construction method 2"), qt.IsTrue, qt.Commentf("warnings: %v", warnings))
 }
 
-// Validates: REQ-EXIF-08, REQ-NF-04
-func TestCanonMakerNotesPrefixedPayloadRejectedLikeExiftool(t *testing.T) {
-	c := qt.New(t)
-
-	prefixedPayload := append([]byte("Canon\x00\x00\x00"), buildCanonMakerNotePayload()...)
-	exifPayload := buildEXIFWithMakeModelAndMakerNotes("Canon", "EOS R5", prefixedPayload)
-	itemPayload := wrapEXIFItemPayload(exifPayload)
-	data := buildMP4WithMetaIDATItem(itemPayload, buildInfeEXIF(1), buildIlocIDAT(1, uint32(len(itemPayload))))
-
-	path := writeTempMedia(c, t, "canon-prefixed.mp4", data)
-	tags, warnings := decodeAllWithWarnings(c, data, EXIF|MAKERNOTES)
-	c.Assert(tags.MakerNotes(), qt.HasLen, 0)
-	c.Assert(anyWarningContains(warnings, "unsupported Canon preamble"), qt.IsTrue, qt.Commentf("warnings: %v", warnings))
-
-	golden := runExiftoolOracle(t, path)
-	_, hasMakerNotes := golden["MakerNotes"]
-	c.Assert(hasMakerNotes, qt.IsFalse)
-}
-
 func testTempOracleExhaustive(t *testing.T, c *qt.C, fileName string, data []byte, sources Source, groups []string, readerFactory decodeReaderFactory) {
 	t.Helper()
 

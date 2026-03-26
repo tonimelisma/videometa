@@ -20,7 +20,7 @@ io.ReadSeeker (or io.Reader fallback)
         → XMP decoder → HandleTag callback
         → IPTC decoder → HandleTag callback
         → QuickTime decoder → HandleTag callback
-        → MakerNotes decoders (Apple/Canon/Sony EXIF, Pentax TAGS) → HandleTag callback
+        → Pentax QuickTime decoder (`TAGS`) → HandleTag callback
         → Sony NRTM XML decoder → HandleTag callback
         → UUID-PROF decoder → HandleTag callback
         → UUID-USMT/MTDT decoder → HandleTag callback
@@ -38,15 +38,11 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-FILE-03 | `videodecoder_mp4.go` | ISOBMFF box parser + metadata routing, including bounded Sony NRTM `idat` XML scans | REQ-BOX-* |
 | ARCH-FILE-03A | `videodecoder_meta_items.go` | `meta/iloc` item parsing, `idat` construction-method validation, non-seekable `idat` buffering, and EXIF/XMP item extraction | REQ-EXIF-06, REQ-XMP-04 |
 | ARCH-FILE-04 | `metadecoder_exif.go` | EXIF IFD parser | REQ-EXIF-01..06 |
-| ARCH-FILE-05 | `metadecoder_exif_fields.go` | Generated EXIF/GPS/Interop tag name tables from `gen/exif_fields_reference.json` (582/32/5 committed reference) | REQ-EXIF-04 |
+| ARCH-FILE-05 | `metadecoder_exif_fields.go` | Generated EXIF/GPS/Interop tag name tables from `gen/exif_fields_reference.json` (581/32/5 committed reference) | REQ-EXIF-04 |
 | ARCH-FILE-06 | `metadecoder_xmp.go` | XMP/RDF XML parser | REQ-XMP-* |
 | ARCH-FILE-07 | `metadecoder_iptc.go` | IPTC record parser + field definitions (inline) | REQ-IPTC-* |
 | ARCH-FILE-08 | `metadecoder_quicktime.go` | QuickTime ilst/freeform parser, locale handling, tag name tables | REQ-QT-* |
-| ARCH-FILE-09 | `metadecoder_makernotes.go` | EXIF MakerNotes dispatch + generic IFD helpers | REQ-EXIF-07..09 |
-| ARCH-FILE-09A | `metadecoder_makernotes_apple.go` | Apple EXIF MakerNotes | REQ-EXIF-07 |
-| ARCH-FILE-09B | `metadecoder_makernotes_canon.go` | Canon EXIF MakerNotes | REQ-EXIF-08 |
-| ARCH-FILE-09C | `metadecoder_makernotes_sony.go` | Sony EXIF MakerNotes | REQ-EXIF-09 |
-| ARCH-FILE-09D | `metadecoder_makernotes_pentax.go` | Pentax `TAGS` QuickTime metadata | REQ-QT-* |
+| ARCH-FILE-09 | `metadecoder_quicktime_pentax.go` | Pentax `TAGS` QuickTime metadata | REQ-QT-* |
 | ARCH-FILE-10 | `metadecoder_sony_nrtm.go` | Sony NonRealTimeMeta XML parser (XAVC metadata) | REQ-QT-08 |
 | ARCH-FILE-11 | `helpers.go` | Rat[T], InvalidFormatError, value converters, ISO6709 parser | REQ-QT-06, REQ-NF-06 |
 | ARCH-FILE-12 | `gen/main.go` | Golden file generator and EXIF field-table generator | REQ-NF-04 |
@@ -77,7 +73,7 @@ io.ReadSeeker (or io.Reader fallback)
 | `moov/udta/meta/ilst` | → QuickTime decoder |
 | `moov/udta/meta/ilst/----` | → QuickTime freeform decoder |
 | `moov/udta/XMP_` | → XMP decoder (raw XMP in udta) |
-| `moov/udta/TAGS` | → Pentax MakerNotes decoder |
+| `moov/udta/TAGS` | → Pentax QuickTime decoder |
 | `moov/udta/©xxx` | → QuickTime old-style text atom |
 | `moov/trak/tref/cdsc` | → ContentDescribes tag |
 | `moov/trak/mdia/minf/gmhd/gmin` | → Generic media header tags |
@@ -104,10 +100,6 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-DEC-05 | QuickTime decoder: new, ilst iteration + freeform atom parsing | No imagemeta equivalent | REQ-QT-* |
 | ARCH-DEC-06 | Value converters ported from exiftool's Perl logic | exiftool is reference implementation | REQ-EXIF-05 |
 | ARCH-DEC-07 | Tag names match exiftool output exactly | D-09 | REQ-QT-07 |
-| ARCH-DEC-08 | MakerNotes: per-manufacturer Go files with embedded tag tables | Clean separation, easy to add more manufacturers | REQ-EXIF-07..09 |
-
-Canon MakerNotes stay anchored at offset `0`. Payloads prefixed with `Canon\0\0\0` are rejected with a warning instead of being blindly skipped because `exiftool 13.50` rejects that preamble too.
-
 ### Single Package Design
 
 All code lives in one `videometa` package (no subpackages), following imagemeta's pattern. This keeps the API simple and avoids import cycles.
@@ -146,7 +138,7 @@ All code lives in one `videometa` package (no subpackages), following imagemeta'
 | ARCH-TEST-02 | Tests compare videometa output against committed golden JSON and generated temp-file exiftool oracle output | REQ-NF-04 |
 | ARCH-TEST-03 | CI runs `go generate ./gen` and diffs both golden JSON and generated EXIF field tables | REQ-NF-10 |
 | ARCH-TEST-04 | Normalization rules for comparison: float precision, string trimming, type coercion | REQ-NF-04 |
-| ARCH-TEST-05 | Dedicated fuzz targets for full MP4 decode, EXIF/XMP/IPTC, `meta` item parsing on seekable and non-seekable readers, and MakerNotes dispatch | REQ-NF-05 |
+| ARCH-TEST-05 | Dedicated fuzz targets for full MP4 decode, EXIF/XMP/IPTC, and `meta` item parsing on seekable and non-seekable readers | REQ-NF-05 |
 | ARCH-TEST-06 | Benchmarks: per-source, all-sources, per-file-type | REQ-NF-03 |
 
 ---
@@ -170,4 +162,4 @@ All code lives in one `videometa` package (no subpackages), following imagemeta'
 | Seek past mdat (ARCH-BOX-03) | mdat is AV data, can be gigabytes |
 | Panic-based control flow (ARCH-IO-03) | Readable decoder code; recovered at boundary |
 | exiftool as reference, not imagemeta (ARCH-DEC-06) | More complete edge case handling |
-| Per-manufacturer MakerNotes Go files (ARCH-DEC-08) | Clean separation, easy to add more manufacturers |
+| Pentax `TAGS` stays on the QuickTime path | Keeps vendor-specific container metadata in the video-native decoder set |

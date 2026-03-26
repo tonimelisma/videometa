@@ -99,6 +99,51 @@ func TestDecodeEXIFGPSCoordinates(t *testing.T) {
 		qt.Commentf("lat: got %f, want ~34.0592", latVal))
 }
 
+// Validates: REQ-EXIF-06
+func TestDecodeEXIFSkipsUnsupportedVendorImageExtension(t *testing.T) {
+	c := qt.New(t)
+
+	exifData := buildTIFFWithEntries([]testEXIFEntry{
+		{
+			tagID: 0x010F,
+			typ:   exifTypeASCII,
+			data:  []byte("SkipTag Cam\x00"),
+		},
+		{
+			tagID: 0x927C,
+			typ:   exifTypeUndef,
+			data:  []byte("ignored"),
+		},
+	})
+
+	var warnings []string
+	bd := &baseDecoder{
+		streamReader: newStreamReader(bytes.NewReader(nil)),
+		opts: Options{
+			Sources: EXIF,
+			HandleTag: func(TagInfo) error {
+				return nil
+			},
+			Warnf: func(format string, args ...any) {
+				warnings = append(warnings, format)
+			},
+		},
+		result: &DecodeResult{},
+	}
+	d := &videoDecoderMP4{baseDecoder: bd}
+
+	got := make(map[string]TagInfo)
+	bd.opts.HandleTag = func(ti TagInfo) error {
+		got[ti.Tag] = ti
+		return nil
+	}
+	d.decodeEXIF(bytes.NewReader(exifData))
+
+	c.Assert(got["Make"].Value, qt.Equals, "SkipTag Cam")
+	c.Assert(len(got), qt.Equals, 1)
+	c.Assert(warnings, qt.HasLen, 0)
+}
+
 // buildEXIFWithGPS creates an EXIF structure with a GPS sub-IFD.
 // Uses explicit offset tracking to avoid calculation errors.
 func buildEXIFWithGPS(byteOrder binary.ByteOrder) []byte {

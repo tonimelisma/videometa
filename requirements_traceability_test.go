@@ -14,7 +14,7 @@ type traceabilityRow struct {
 	status      string
 }
 
-// Validates: REQ-EXIF-04, REQ-EXIF-06, REQ-EXIF-07, REQ-EXIF-08, REQ-EXIF-09, REQ-XMP-04
+// Validates: REQ-EXIF-04, REQ-EXIF-06, REQ-XMP-04
 func TestTraceabilityEvidenceStatuses(t *testing.T) {
 	c := qt.New(t)
 
@@ -29,21 +29,6 @@ func TestTraceabilityEvidenceStatuses(t *testing.T) {
 			requirement: "REQ-EXIF-06",
 			testFile:    "videometa_test.go, videometa_meta_items_test.go, videometa_oracle_test.go",
 			status:      "Validated (meta/iloc); Covered (UUID)",
-		},
-		"REQ-EXIF-07": {
-			requirement: "REQ-EXIF-07",
-			testFile:    "metadecoder_makernotes_test.go",
-			status:      "Covered",
-		},
-		"REQ-EXIF-08": {
-			requirement: "REQ-EXIF-08",
-			testFile:    "metadecoder_makernotes_test.go, videometa_oracle_test.go",
-			status:      "Covered",
-		},
-		"REQ-EXIF-09": {
-			requirement: "REQ-EXIF-09",
-			testFile:    "metadecoder_makernotes_test.go",
-			status:      "Covered",
 		},
 		"REQ-XMP-04": {
 			requirement: "REQ-XMP-04",
