@@ -28,6 +28,8 @@ func TestEXIFFieldReferenceMatchesManifest(t *testing.T) {
 	c.Assert(exifFields, qt.DeepEquals, manifestMap(c, manifest.EXIF))
 	c.Assert(exifFieldsGPS, qt.DeepEquals, manifestMap(c, manifest.GPS))
 	c.Assert(exifInteropFields, qt.DeepEquals, manifestMap(c, manifest.Interop))
+	_, hasRemovedTag := exifFields[0x927C]
+	c.Assert(hasRemovedTag, qt.IsFalse)
 }
 
 func loadEXIFFieldManifest(c *qt.C) exifFieldManifestTest {

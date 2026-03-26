@@ -885,8 +885,8 @@ func (d *videoDecoderMP4) decodeUdta(udtaStart int64, udtaSize uint64) {
 				}
 			}
 		case boxTypeStr == "TAGS":
-			// Pentax manufacturer-specific binary metadata.
-			if d.opts.Sources.Has(MAKERNOTES) {
+			// Pentax QuickTime metadata.
+			if d.opts.Sources.Has(QUICKTIME) {
 				dataLen := int(boxSize) - 8
 				if dataLen > 0 && dataLen < 1024*1024 {
 					data := d.readBytes(dataLen)

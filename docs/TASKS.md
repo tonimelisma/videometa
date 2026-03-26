@@ -35,11 +35,9 @@ All complete. See git history for details.
 
 ## Milestone 9: Manufacturer-Specific Video Metadata
 
-Reframed from "EXIF MakerNotes" to cover manufacturer-specific video container metadata.
-
 | Task | Description | Status | Files |
 |------|-------------|--------|-------|
-| TASK-M9-01 | Pentax TAGS binary parser (7 tags: Make, ExposureTime, FNumber, ExposureCompensation, WhiteBalance, FocalLength, ISO) | ✅ Complete | metadecoder_makernotes_pentax.go |
+| TASK-M9-01 | Pentax TAGS binary parser (7 tags: Make, ExposureTime, FNumber, ExposureCompensation, WhiteBalance, FocalLength, ISO) | ✅ Complete | metadecoder_quicktime_pentax.go |
 | TASK-M9-02 | Sony XAVC UUID-PROF (19 tags: file/video/audio profiles) | ✅ Complete | videodecoder_mp4.go |
 | TASK-M9-03 | Sony UUID-USMT/MTDT (TrackProperty, TimeZone) | ✅ Complete | videodecoder_mp4.go |
 | TASK-M9-04 | Sony NonRealTimeMeta XML parser (35 tags) | ✅ Complete | metadecoder_sony_nrtm.go |
@@ -92,8 +90,6 @@ Every previously-skipped test implemented. No remaining `t.Skip` except conditio
 | TASK-M12-07 | TestDecodeIPTCCharsets (REQ-IPTC-02) | ✅ Complete | metadecoder_iptc_test.go |
 | TASK-M12-08 | TestDecodeIPTCViaApplicationNotes (REQ-IPTC-04) | ✅ Complete | metadecoder_iptc_test.go, metadecoder_exif_fields.go |
 | TASK-M12-09 | TestDecodeXMPExtendedSkip (REQ-XMP-05) | ✅ Complete | metadecoder_xmp_test.go |
-| TASK-M12-10 | Unknown-manufacturer MakerNotes warning coverage | ✅ Complete | videometa_test.go, testhelpers_test.go |
-
 ---
 
 ## Milestone 13: Fix Weak Tests
@@ -107,7 +103,6 @@ Comprehensive test audit: strengthen all non-specific assertions, fix fuzz error
 | TASK-M13-02 | Add `TestDecodeLatencyTarget` (REQ-NF-02, < 500us ceiling) | ✅ Complete | videometa_bench_test.go |
 | TASK-M13-03 | TestWarnfCallback asserts specific "invalid byte order marker" warning | ✅ Complete | videometa_test.go |
 | TASK-M13-04 | TestBestEffortPartial asserts full decode success (not either/or) | ✅ Complete | videometa_test.go |
-| TASK-M13-05 | TestDecodeMakerNotesUnknownManufacturerWarns asserts warning content + no MAKERNOTES tags | ✅ Complete | videometa_test.go |
 | TASK-M13-06 | TestBoxSkipUnknown asserts no error + ftyp tag emitted | ✅ Complete | videometa_test.go |
 | TASK-M13-07 | TestLimitTagSize three-tier test proving exact > mechanism | ✅ Complete | videometa_test.go |
 
@@ -150,7 +145,6 @@ Consistency fixes for error typing in IO paths, fuzz target documentation, test 
 | TASK-BL-03 | DJI drone MP4 test file + golden test | Pending | testdata/ |
 | TASK-BL-04 | Pro camera MOV test file + golden test | Pending | testdata/ |
 | TASK-BL-05 | 64-bit box size test file | Pending | testdata/ |
-| TASK-BL-06 | EXIF MakerNotes (Apple, Canon, Sony in EXIF IFD) | ✅ Complete | metadecoder_makernotes*.go |
 
 ---
 
@@ -162,10 +156,8 @@ Truthfulness fixes after audit: align docs and validation with the real parser, 
 |------|-------------|--------|-------|
 | TASK-M16-01 | Add `meta/iloc` EXIF/XMP item extraction (`iloc`, `iinf`, `infe`, `pitm`, `idat`) | ✅ Complete | videodecoder_mp4.go, videodecoder_meta_items.go |
 | TASK-M16-02 | Add end-to-end tests for UUID EXIF, `meta/iloc` EXIF, and `meta/iloc` XMP | ✅ Complete | videometa_meta_items_test.go |
-| TASK-M16-03 | Replace EXIF MakerNotes stub with Apple/Canon/Sony dispatch and regression tests | ✅ Complete | metadecoder_makernotes*.go, metadecoder_makernotes_test.go |
-| TASK-M16-04 | Add dedicated fuzz coverage for item-info parsing and MakerNotes dispatch | ✅ Complete | videometa_fuzz_test.go |
-| TASK-M16-05 | Tighten latency assertion to the documented `<500us` target | ✅ Complete | videometa_bench_test.go |
-| TASK-M16-06 | Update requirements, architecture, traceability, and README/CLAUDE status claims to match implementation | ✅ Complete | docs/, README.md, CLAUDE.md |
+| TASK-M16-03 | Tighten latency assertion to the documented `<500us` target | ✅ Complete | videometa_bench_test.go |
+| TASK-M16-04 | Update requirements, architecture, traceability, and README/CLAUDE status claims to match implementation | ✅ Complete | docs/, README.md, CLAUDE.md |
 
 ---
 
@@ -175,13 +167,10 @@ Truthfulness fixes after the integrity recovery increment: generate the full EXI
 
 | Task | Description | Status | Files |
 |------|-------------|--------|-------|
-| TASK-M17-01 | Generate EXIF field tables from committed reference manifest (`582/32/5`) | ✅ Complete | gen/, metadecoder_exif_fields.go, exif_fields_reference_test.go |
+| TASK-M17-01 | Generate EXIF field tables from committed reference manifest (`581/32/5`) | ✅ Complete | gen/, metadecoder_exif_fields.go, exif_fields_reference_test.go |
 | TASK-M17-02 | Fix `idat` buffering for non-seekable `meta/iloc` extraction and enforce `idat` extent bounds | ✅ Complete | videodecoder_mp4.go, videodecoder_meta_items.go |
 | TASK-M17-03 | Add temp-file exiftool oracle tests for `meta/iloc` EXIF/XMP and XMP UUID routes | ✅ Complete | videometa_oracle_test.go, testhelpers_test.go |
-| TASK-M17-04 | Reject Canon `Canon\\0\\0\\0` MakerNotes preamble with warning, matching exiftool’s rejection | ✅ Complete | metadecoder_makernotes_canon.go, videometa_oracle_test.go |
-| TASK-M17-05 | Update requirements, architecture, CI, and traceability statuses to distinguish `Validated` from `Covered` honestly | ✅ Complete | docs/, .github/workflows/ci.yml |
-
----
+| TASK-M17-04 | Update requirements, architecture, CI, and traceability statuses to distinguish `Validated` from `Covered` honestly | ✅ Complete | docs/, .github/workflows/ci.yml |
 
 ## Milestone 18: NRTM Streaming Guard
 
@@ -192,3 +181,15 @@ Follow-up after PR review: keep Sony NRTM XML `idat` scans bounded by the existi
 | TASK-M18-01 | Add public-path regression tests for Sony NRTM XML from `idat` and for large XML-only `idat` skip-on-seek behavior | ✅ Complete | videometa_sony_nrtm_test.go, testhelpers_test.go |
 | TASK-M18-02 | Guard Sony NRTM `idat` XML scans behind the `<1MB` direct-scan limit while preserving `meta/iloc` buffering semantics | ✅ Complete | videodecoder_mp4.go |
 | TASK-M18-03 | Update architecture/task docs to record the bounded NRTM `idat` scan behavior | ✅ Complete | docs/ARCHITECTURE.md, docs/TASKS.md |
+
+---
+
+## Milestone 19: Scope Cleanup
+
+Refocus the package on video-native metadata paths and remove image-specific vendor EXIF extensions from the public surface.
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M19-01 | Remove vendor-specific EXIF extension decoding and API surface | ✅ Complete | videometa.go, metadecoder_exif.go |
+| TASK-M19-02 | Reclassify Pentax `TAGS` under QuickTime metadata | ✅ Complete | metadecoder_quicktime_pentax.go, videodecoder_mp4.go |
+| TASK-M19-03 | Remove legacy tests/fuzzers/docs tied to the retired EXIF vendor extension path | ✅ Complete | *_test.go, docs/, README.md, CLAUDE.md |

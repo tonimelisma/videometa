@@ -16,14 +16,13 @@ import (
 type Source uint32
 
 const (
-	EXIF       Source = 1 << iota // EXIF IFD data
-	XMP                           // XMP/RDF XML
-	IPTC                          // IPTC-IIM records
-	QUICKTIME                     // QuickTime native metadata (ilst, freeform atoms)
-	CONFIG                        // Codec/dimension info from container structure
-	MAKERNOTES                    // Manufacturer-specific metadata (Pentax TAGS, etc.)
-	XML                           // Structured XML metadata (Sony NRTM, etc.)
-	COMPOSITE                     // Derived/computed tags (matching exiftool Composite group)
+	EXIF      Source = 1 << iota // EXIF IFD data
+	XMP                          // XMP/RDF XML
+	IPTC                         // IPTC-IIM records
+	QUICKTIME                    // QuickTime native metadata (ilst, freeform atoms)
+	CONFIG                       // Codec/dimension info from container structure
+	XML                          // Structured XML metadata (Sony NRTM, etc.)
+	COMPOSITE                    // Derived/computed tags (matching exiftool Composite group)
 )
 
 // Has reports whether s contains the given source.
@@ -118,7 +117,7 @@ func Decode(opts Options) (result DecodeResult, err error) {
 		return result, fmt.Errorf("videometa: Options.HandleTag is required")
 	}
 	if opts.Sources.IsZero() {
-		opts.Sources = EXIF | XMP | IPTC | QUICKTIME | CONFIG | MAKERNOTES | XML
+		opts.Sources = EXIF | XMP | IPTC | QUICKTIME | CONFIG | XML
 	}
 	if opts.LimitNumTags == 0 {
 		opts.LimitNumTags = 5000
@@ -202,14 +201,13 @@ func Decode(opts Options) (result DecodeResult, err error) {
 
 // Tags collects decoded metadata for convenient access via DecodeAll.
 type Tags struct {
-	exif       map[string]TagInfo
-	xmp        map[string]TagInfo
-	iptc       map[string]TagInfo
-	quicktime  map[string]TagInfo
-	config     map[string]TagInfo
-	makernotes map[string]TagInfo
-	xml        map[string]TagInfo
-	composite  map[string]TagInfo
+	exif      map[string]TagInfo
+	xmp       map[string]TagInfo
+	iptc      map[string]TagInfo
+	quicktime map[string]TagInfo
+	config    map[string]TagInfo
+	xml       map[string]TagInfo
+	composite map[string]TagInfo
 }
 
 // Add stores a tag in the appropriate source map.
@@ -226,8 +224,6 @@ func (t *Tags) Add(tag TagInfo) {
 		m = &t.quicktime
 	case CONFIG:
 		m = &t.config
-	case MAKERNOTES:
-		m = &t.makernotes
 	case XML:
 		m = &t.xml
 	case COMPOSITE:
@@ -242,11 +238,11 @@ func (t *Tags) Add(tag TagInfo) {
 }
 
 // All returns all tags merged into a single map. On key collision,
-// priority is EXIF > XMP > QUICKTIME > MAKERNOTES > XML > IPTC > CONFIG.
+// priority is EXIF > XMP > QUICKTIME > XML > IPTC > CONFIG.
 func (t Tags) All() map[string]TagInfo {
 	result := make(map[string]TagInfo)
 	// Lowest priority first, highest last (overwrites).
-	for _, m := range []map[string]TagInfo{t.composite, t.config, t.iptc, t.xml, t.makernotes, t.quicktime, t.xmp, t.exif} {
+	for _, m := range []map[string]TagInfo{t.composite, t.config, t.iptc, t.xml, t.quicktime, t.xmp, t.exif} {
 		for k, v := range m {
 			result[k] = v
 		}
@@ -268,9 +264,6 @@ func (t Tags) QuickTime() map[string]TagInfo { return t.quicktime }
 
 // Config returns all CONFIG tags.
 func (t Tags) Config() map[string]TagInfo { return t.config }
-
-// MakerNotes returns all manufacturer-specific metadata tags.
-func (t Tags) MakerNotes() map[string]TagInfo { return t.makernotes }
 
 // XML returns all structured XML metadata tags (e.g., Sony NRTM).
 func (t Tags) XML() map[string]TagInfo { return t.xml }
@@ -469,31 +462,29 @@ func computeComposite(tags *Tags, result DecodeResult) {
 		}
 	}
 
-	// Photography composites from MakerNotes.
-	mn := tags.MakerNotes()
-
-	if fn, ok := mn["FNumber"]; ok {
+	// Photography composites from vendor-specific QuickTime metadata.
+	if fn, ok := qt["FNumber"]; ok {
 		if v, ok := toFloat64(fn.Value); ok {
 			add("Aperture", v)
 		}
 	}
 
-	if et, ok := mn["ExposureTime"]; ok {
+	if et, ok := qt["ExposureTime"]; ok {
 		if v, ok := toFloat64(et.Value); ok {
 			add("ShutterSpeed", v)
 		}
 	}
 
-	if fl, ok := mn["FocalLength"]; ok {
+	if fl, ok := qt["FocalLength"]; ok {
 		if v, ok := toFloat64(fl.Value); ok {
 			add("FocalLength35efl", v)
 		}
 	}
 
 	// LightValue: log2(Aperture^2 / ShutterSpeed) - log2(ISO/100).
-	if apTag, ok := mn["FNumber"]; ok {
-		if etTag, ok := mn["ExposureTime"]; ok {
-			if isoTag, ok := mn["ISO"]; ok {
+	if apTag, ok := qt["FNumber"]; ok {
+		if etTag, ok := qt["ExposureTime"]; ok {
+			if isoTag, ok := qt["ISO"]; ok {
 				ap, _ := toFloat64(apTag.Value)
 				et, _ := toFloat64(etTag.Value)
 				iso, _ := toFloat64(isoTag.Value)

@@ -441,7 +441,6 @@ func TestTagsGetters(t *testing.T) {
 	tags.Add(TagInfo{Source: IPTC, Tag: "City", Value: "NYC"})
 	tags.Add(TagInfo{Source: QUICKTIME, Tag: "Duration", Value: 5.0})
 	tags.Add(TagInfo{Source: CONFIG, Tag: "Width", Value: 1920})
-	tags.Add(TagInfo{Source: MAKERNOTES, Tag: "ISO", Value: 100})
 	tags.Add(TagInfo{Source: XML, Tag: "DeviceModel", Value: "A7"})
 	tags.Add(TagInfo{Source: COMPOSITE, Tag: "ImageSize", Value: "1920 1080"})
 
@@ -450,12 +449,11 @@ func TestTagsGetters(t *testing.T) {
 	c.Assert(tags.IPTC()["City"].Value, qt.Equals, "NYC")
 	c.Assert(tags.QuickTime()["Duration"].Value, qt.Equals, 5.0)
 	c.Assert(tags.Config()["Width"].Value, qt.Equals, 1920)
-	c.Assert(tags.MakerNotes()["ISO"].Value, qt.Equals, 100)
 	c.Assert(tags.XML()["DeviceModel"].Value, qt.Equals, "A7")
 	c.Assert(tags.Composite()["ImageSize"].Value, qt.Equals, "1920 1080")
 
 	all := tags.All()
-	c.Assert(len(all), qt.Equals, 8)
+	c.Assert(len(all), qt.Equals, 7)
 }
 
 // Validates: REQ-API-13
@@ -598,52 +596,6 @@ func TestQuickTimeCreationDateTimezone(t *testing.T) {
 		qt.Commentf("CreationDate should preserve timezone, got %q", cdStr))
 }
 
-func TestDecodeMakerNotesUnknownManufacturerWarns(t *testing.T) {
-	c := qt.New(t)
-
-	// Build EXIF with tag 0x927C (MakerNotes) containing arbitrary data.
-	// Verify decodeMakerNotes is invoked and emits a warning for unknown manufacturer.
-	exifData := buildEXIFWithMakerNotes([]byte("UnknownMfr\x00\x00\x00\x00\x00\x00"))
-
-	var warnings []string
-	var emittedTags []TagInfo
-	bd := &baseDecoder{
-		streamReader: newStreamReader(readerSeekerFromBytes(nil)),
-		opts: Options{
-			Sources: EXIF | MAKERNOTES,
-			HandleTag: func(ti TagInfo) error {
-				emittedTags = append(emittedTags, ti)
-				return nil
-			},
-			Warnf: func(f string, a ...any) {
-				warnings = append(warnings, fmt.Sprintf(f, a...))
-			},
-		},
-		result: &DecodeResult{},
-	}
-	d := &videoDecoderMP4{baseDecoder: bd}
-	d.decodeEXIF(readerSeekerFromBytes(exifData))
-
-	// Unknown MakerNotes should fire a warning for unrecognized manufacturer data.
-	c.Assert(len(warnings) > 0, qt.IsTrue,
-		qt.Commentf("expected warning from decodeMakerNotes for unknown manufacturer"))
-	foundExpectedWarning := false
-	for _, w := range warnings {
-		if strings.Contains(w, "unrecognized EXIF MakerNotes payload") &&
-			strings.Contains(w, "16 bytes") {
-			foundExpectedWarning = true
-		}
-	}
-	c.Assert(foundExpectedWarning, qt.IsTrue,
-		qt.Commentf("expected warning about unrecognized 16-byte MakerNotes payload, got: %v", warnings))
-
-	// No MAKERNOTES-sourced tags should be emitted for an unknown manufacturer.
-	for _, ti := range emittedTags {
-		c.Assert(ti.Source, qt.Not(qt.Equals), MAKERNOTES,
-			qt.Commentf("unexpected MAKERNOTES-sourced tag %q emitted for unknown manufacturer", ti.Tag))
-	}
-}
-
 // Validates: REQ-API-16
 func TestTagsSeparateBySource(t *testing.T) {
 	c := qt.New(t)
@@ -654,7 +606,7 @@ func TestTagsSeparateBySource(t *testing.T) {
 
 	tags, _, err := DecodeAll(Options{
 		R:       f,
-		Sources: QUICKTIME | MAKERNOTES | XMP,
+		Sources: QUICKTIME | XMP,
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -664,11 +616,9 @@ func TestTagsSeparateBySource(t *testing.T) {
 	_, hasTimeScale := qtTags["TimeScale"]
 	c.Assert(hasTimeScale, qt.IsTrue, qt.Commentf("QuickTime should have TimeScale"))
 
-	// MakerNotes-sourced tags (Pentax TAGS atom).
-	mnTags := tags.MakerNotes()
-	c.Assert(len(mnTags) > 0, qt.IsTrue, qt.Commentf("no MakerNotes tags"))
-	_, hasISO := mnTags["ISO"]
-	c.Assert(hasISO, qt.IsTrue, qt.Commentf("MakerNotes should have ISO"))
+	// Pentax TAGS are reclassified under QuickTime.
+	_, hasISO := qtTags["ISO"]
+	c.Assert(hasISO, qt.IsTrue, qt.Commentf("QuickTime should have ISO"))
 
 	// XMP-sourced tags.
 	xmpTags := tags.XMP()
@@ -827,7 +777,7 @@ func TestSeedCorpusDecodesSuccessfully(t *testing.T) {
 			tagCount := 0
 			_, err = Decode(Options{
 				R:       f,
-				Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG | MAKERNOTES,
+				Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
 				HandleTag: func(ti TagInfo) error {
 					tagCount++
 					return nil

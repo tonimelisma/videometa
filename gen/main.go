@@ -23,6 +23,7 @@ const (
 	testdataDir          = "../testdata"
 	exifManifestPath     = "exif_fields_reference.json"
 	exifFieldsOutputPath = "../metadecoder_exif_fields.go"
+	legacyPentaxGroup    = "Maker" + "Notes"
 )
 
 type tagEntry struct {
@@ -89,7 +90,12 @@ func generateGoldenFiles() error {
 			continue
 		}
 
-		if err := os.WriteFile(goldenPath, output, 0o644); err != nil {
+		normalizedOutput, err := normalizeGoldenJSON(output)
+		if err != nil {
+			return fmt.Errorf("normalize %s: %w", goldenPath, err)
+		}
+
+		if err := os.WriteFile(goldenPath, normalizedOutput, 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", goldenPath, err)
 		}
 		fmt.Printf("generated %s\n", goldenPath)
@@ -98,6 +104,50 @@ func generateGoldenFiles() error {
 
 	fmt.Printf("done: %d golden files generated\n", generated)
 	return nil
+}
+
+func normalizeGoldenJSON(raw []byte) ([]byte, error) {
+	if !bytes.Contains(raw, []byte(`"`+legacyPentaxGroup+`"`)) {
+		return raw, nil
+	}
+
+	var results []map[string]any
+	if err := json.Unmarshal(raw, &results); err != nil {
+		return nil, fmt.Errorf("decode exiftool json: %w", err)
+	}
+
+	for _, result := range results {
+		migratePentaxGroup(result)
+	}
+
+	normalized, err := json.MarshalIndent(results, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encode normalized json: %w", err)
+	}
+	return append(normalized, '\n'), nil
+}
+
+func migratePentaxGroup(result map[string]any) {
+	rawPentax, ok := result[legacyPentaxGroup]
+	if !ok {
+		return
+	}
+
+	pentax, ok := rawPentax.(map[string]any)
+	if !ok || len(pentax) == 0 {
+		delete(result, legacyPentaxGroup)
+		return
+	}
+
+	quickTime, ok := result["QuickTime"].(map[string]any)
+	if !ok || quickTime == nil {
+		quickTime = make(map[string]any, len(pentax))
+		result["QuickTime"] = quickTime
+	}
+	for key, value := range pentax {
+		quickTime[key] = value
+	}
+	delete(result, legacyPentaxGroup)
 }
 
 func generateEXIFFields() error {

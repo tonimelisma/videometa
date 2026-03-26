@@ -4,7 +4,7 @@ Go package for reading metadata from video files. Companion to [bep/imagemeta](h
 
 ## Status
 
-**v0.1.0.** Implemented decoders: ISOBMFF, EXIF, XMP, IPTC, QuickTime native, `meta/iloc` EXIF/XMP item extraction, Apple/Canon/Sony EXIF MakerNotes, Pentax `TAGS`, Sony XAVC (UUID-PROF, USMT/MTDT, NRTM XML), Apple MOV (mdta locales, wave/frma). Real-file golden coverage is maintained for the committed fixtures; synthetic end-to-end tests cover `meta/iloc` and EXIF MakerNotes paths.
+**v0.1.0.** Implemented decoders: ISOBMFF, EXIF, XMP, IPTC, QuickTime native, `meta/iloc` EXIF/XMP item extraction, Pentax `TAGS`, Sony XAVC (UUID-PROF, USMT/MTDT, NRTM XML), Apple MOV (mdta locales, wave/frma). Real-file golden coverage is maintained for the committed fixtures; synthetic end-to-end tests cover the `meta/iloc` paths.
 
 See `INIT.md` for project history. See `docs/` for requirements, architecture, and task plan. See `README.md` for usage.
 
@@ -18,7 +18,7 @@ See `INIT.md` for project history. See `docs/` for requirements, architecture, a
 | `metadecoder_xmp.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (XMP) |
 | `metadecoder_iptc*.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (IPTC) |
 | `metadecoder_quicktime*.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (QuickTime) |
-| `metadecoder_makernotes_pentax.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (EXIF-07..09) |
+| `metadecoder_quicktime_pentax.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (QuickTime) |
 | `metadecoder_sony_nrtm.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (QuickTime) |
 | `io.go` | `docs/ARCHITECTURE.md` §5 (streamReader) | |
 | `helpers.go` | `docs/ARCHITECTURE.md` §6 (Error Handling) | |
