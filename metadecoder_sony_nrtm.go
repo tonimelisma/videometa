@@ -12,7 +12,7 @@ import (
 // exiftool's XML group output. The tag naming convention flattens the XML
 // hierarchy: parent element names are concatenated with attribute/child names
 // in CamelCase. Only the first occurrence of repeating elements is emitted.
-func (d *videoDecoderMP4) decodeSonyNRTM(r io.Reader) {
+func (d *videoDecoderMP4) decodeSonyNRTM(r io.Reader, namespace string) {
 	dec := xml.NewDecoder(r)
 
 	var root nrtmRoot
@@ -25,9 +25,9 @@ func (d *videoDecoderMP4) decodeSonyNRTM(r io.Reader) {
 
 	emit := func(name string, value any) {
 		d.emitTag(TagInfo{
-			Source:    XML,
+			Source:    VENDOR,
 			Tag:       name,
-			Namespace: "XML",
+			Namespace: namespace,
 			Value:     value,
 		})
 	}

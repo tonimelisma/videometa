@@ -18,7 +18,7 @@ func BenchmarkDecodeMinimalMP4AllSources(b *testing.B) {
 		r := newBytesReadSeeker(data)
 		_, _ = Decode(Options{
 			R:       r,
-			Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
+			Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG,
 			HandleTag: func(ti TagInfo) error {
 				return nil
 			},
@@ -76,9 +76,9 @@ func BenchmarkDecodeAllMinimalMP4(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		r := newBytesReadSeeker(data)
-		_, _, _ = DecodeAll(Options{
+		_, _ = DecodeAll(Options{
 			R:       r,
-			Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
+			Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG,
 		})
 	}
 }
@@ -93,9 +93,9 @@ func BenchmarkDecodeExifToolQuickTimeMOV(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		r := newBytesReadSeeker(data)
-		_, _, _ = DecodeAll(Options{
+		_, _ = DecodeAll(Options{
 			R:       r,
-			Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
+			Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG,
 		})
 	}
 }
@@ -110,7 +110,7 @@ func BenchmarkDecodeWithAudioMP4(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		r := newBytesReadSeeker(data)
-		_, _, _ = DecodeAll(Options{
+		_, _ = DecodeAll(Options{
 			R:       r,
 			Sources: QUICKTIME | CONFIG,
 		})

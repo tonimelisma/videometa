@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -147,17 +148,25 @@ func formatTimeForGolden(t time.Time) string {
 func goldenGroupTags(tags Tags, group string) map[string]TagInfo {
 	switch group {
 	case "EXIF":
-		return tags.EXIF()
+		return flattenSourceTags(tags.EXIF())
 	case "IPTC":
-		return tags.IPTC()
+		return flattenSourceTags(tags.IPTC())
 	case "QuickTime":
-		return tags.QuickTime()
+		merged := flattenSourceTags(tags.QuickTime())
+		for name, tag := range flattenSourceTagsWhere(tags.Vendor(), func(tag TagInfo) bool {
+			return !strings.HasSuffix(tag.Namespace, "/nrtm")
+		}) {
+			merged[name] = tag
+		}
+		return merged
 	case "XMP":
-		return tags.XMP()
+		return flattenSourceTags(tags.XMP())
 	case "XML":
-		return tags.XML()
+		return flattenSourceTagsWhere(tags.Vendor(), func(tag TagInfo) bool {
+			return strings.HasSuffix(tag.Namespace, "/nrtm")
+		})
 	case "Composite":
-		return tags.Composite()
+		return flattenSourceTags(tags.Composite())
 	default:
 		return nil
 	}
@@ -172,9 +181,9 @@ func testGoldenExhaustive(c *qt.C, videoPath string, goldenPath string, groups [
 	defer func() { _ = f.Close() }()
 
 	// Decode with all sources that any group might need.
-	tags, _, err := DecodeAll(Options{
+	tags, _, err := decodeAllForTest(Options{
 		R:       f,
-		Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG | XML,
+		Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG | COMPOSITE,
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -242,11 +251,11 @@ func TestGoldenTruncated(t *testing.T) {
 	defer func() { _ = f.Close() }()
 
 	// Truncated file — decode will error but may emit partial ftyp tags.
-	tags, _, _ := DecodeAll(Options{R: f, Sources: QUICKTIME})
+	tags, _, _ := decodeAllForTest(Options{R: f, Sources: QUICKTIME})
 
 	golden := loadGolden(c, "testdata/truncated.mp4.exiftool.json")
 	qtGolden := golden["QuickTime"].(map[string]any)
-	qtTags := tags.QuickTime()
+	qtTags := flattenSourceTags(tags.QuickTime())
 
 	// Verify whatever tags were emitted match exiftool.
 	for name, goldenVal := range qtGolden {
@@ -286,7 +295,7 @@ func TestGoldenWithGPSLatLong(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = f.Close() }()
 
-	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
+	tags, _, err := decodeAllForTest(Options{R: f, Sources: QUICKTIME})
 	c.Assert(err, qt.IsNil)
 
 	lat, lon, err := tags.GetLatLong()

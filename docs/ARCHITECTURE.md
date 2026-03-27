@@ -8,7 +8,7 @@ Each design element has an ID (`ARCH-*`) linked back to requirements (`REQ-*`).
 
 | ID | Description | Traces to |
 |----|-------------|-----------|
-| ARCH-FLOW-01 | End-to-end pipeline from reader through box parser to metadata decoders and callbacks | REQ-API-01..18 |
+| ARCH-FLOW-01 | End-to-end pipeline from reader through box parser to metadata decoders and callbacks | REQ-API-01..21 |
 
 ```
 io.ReadSeeker (or io.Reader fallback)
@@ -20,11 +20,9 @@ io.ReadSeeker (or io.Reader fallback)
         → XMP decoder → HandleTag callback
         → IPTC decoder → HandleTag callback
         → QuickTime decoder → HandleTag callback
-        → Pentax QuickTime decoder (`TAGS`) → HandleTag callback
-        → Sony NRTM XML decoder → HandleTag callback
-        → UUID-PROF decoder → HandleTag callback
-        → UUID-USMT/MTDT decoder → HandleTag callback
+        → Vendor decoder families (`Pentax/moov/udta/TAGS`, Sony NRTM, Sony UUID-PROF, Sony UUID-USMT) → HandleTag callback
         → CONFIG extractor → DecodeResult.VideoConfig
+        → DecodeAll collector → Metadata{Tags, VideoConfig}
 ```
 
 ---
@@ -33,7 +31,7 @@ io.ReadSeeker (or io.Reader fallback)
 
 | ID | File | Purpose | Traces to |
 |----|------|---------|-----------|
-| ARCH-FILE-01 | `videometa.go` | Public API: Decode, DecodeAll, Options, TagInfo, Tags, Source, VideoFormat, DecodeResult, VideoConfig | REQ-API-* |
+| ARCH-FILE-01 | `videometa.go` | Public API: Decode, DecodeAll, Metadata, Options, TagInfo, Tags, SourceTags, Source, VideoFormat, DecodeResult, VideoConfig | REQ-API-* |
 | ARCH-FILE-02 | `io.go` | streamReader: binary reads, byte-order, seek, buffer pool, panic control flow | REQ-NF-01, REQ-NF-02 |
 | ARCH-FILE-03 | `videodecoder_mp4.go` | ISOBMFF box parser + metadata routing, including bounded Sony NRTM `idat` XML scans | REQ-BOX-* |
 | ARCH-FILE-03A | `videodecoder_meta_items.go` | `meta/iloc` item parsing, `idat` construction-method validation, non-seekable `idat` buffering, and EXIF/XMP item extraction | REQ-EXIF-06, REQ-XMP-04 |
@@ -42,8 +40,8 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-FILE-06 | `metadecoder_xmp.go` | XMP/RDF XML parser | REQ-XMP-* |
 | ARCH-FILE-07 | `metadecoder_iptc.go` | IPTC record parser + field definitions (inline) | REQ-IPTC-* |
 | ARCH-FILE-08 | `metadecoder_quicktime.go` | QuickTime ilst/freeform parser, locale handling, tag name tables | REQ-QT-* |
-| ARCH-FILE-09 | `metadecoder_quicktime_pentax.go` | Pentax `TAGS` QuickTime metadata | REQ-QT-* |
-| ARCH-FILE-10 | `metadecoder_sony_nrtm.go` | Sony NonRealTimeMeta XML parser (XAVC metadata) | REQ-QT-08 |
+| ARCH-FILE-09 | `metadecoder_quicktime_pentax.go` | Pentax `TAGS` vendor metadata family | REQ-QT-* |
+| ARCH-FILE-10 | `metadecoder_sony_nrtm.go` | Sony NonRealTimeMeta vendor metadata parser (XAVC metadata) | REQ-QT-08 |
 | ARCH-FILE-11 | `helpers.go` | Rat[T], InvalidFormatError, value converters, ISO6709 parser | REQ-QT-06, REQ-NF-06 |
 | ARCH-FILE-12 | `gen/main.go` | Golden file generator and EXIF field-table generator | REQ-NF-04 |
 | ARCH-FILE-13 | `testdata/` | Test video files + golden JSON | REQ-TEST-* |
@@ -58,7 +56,7 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-BOX-01 | Recursive descent over known container boxes (`moov`, `trak`, `mdia`, `minf`, `stbl`, `udta`, `meta`) with bounded depth | Keeps code local to each container while preserving streaming behavior | REQ-BOX-01..05, REQ-NF-06 |
 | ARCH-BOX-02 | `readBoxHeader()` returns `(totalSize, fourcc, isEOF)` | Core primitive for all box navigation | REQ-BOX-01..04 |
 | ARCH-BOX-03 | Skip mdat by seeking (ReadSeeker) or read+discard (Reader) | mdat can be gigabytes | REQ-BOX-05, REQ-API-03 |
-| ARCH-BOX-04 | Routing by container context plus metadata sub-box handlers (`uuid`, `meta`, `iloc`, `iinf`, `pitm`, `idat`, `ilst`) | Covers EXIF/XMP UUID paths, item-info paths, and QuickTime metadata; `construction method 1` reads are range-checked against `idat` and buffered for non-seekable readers, while Sony NRTM XML only scans `idat` directly when the payload is below the 1 MB XML parse gate | REQ-BOX-07, REQ-BOX-08 |
+| ARCH-BOX-04 | Routing by container context plus metadata sub-box handlers (`uuid`, `meta`, `iloc`, `iinf`, `pitm`, `idat`, `ilst`) | Covers EXIF/XMP UUID paths, item-info paths, QuickTime metadata, and vendor metadata; `construction method 1` reads are range-checked against `idat` and buffered for non-seekable readers, while Sony NRTM XML only scans `idat` directly when the payload is below the 1 MB XML parse gate | REQ-BOX-07, REQ-BOX-08 |
 | ARCH-BOX-05 | ftyp validation: check major brand and compatible brands | Detect MOV vs MP4 internally | REQ-BOX-06, REQ-API-04 |
 
 ### Box Path Routing Table
@@ -73,12 +71,12 @@ io.ReadSeeker (or io.Reader fallback)
 | `moov/udta/meta/ilst` | → QuickTime decoder |
 | `moov/udta/meta/ilst/----` | → QuickTime freeform decoder |
 | `moov/udta/XMP_` | → XMP decoder (raw XMP in udta) |
-| `moov/udta/TAGS` | → Pentax QuickTime decoder |
+| `moov/udta/TAGS` | → Pentax vendor decoder |
 | `moov/udta/©xxx` | → QuickTime old-style text atom |
 | `moov/trak/tref/cdsc` | → ContentDescribes tag |
 | `moov/trak/mdia/minf/gmhd/gmin` | → Generic media header tags |
 | `moov/trak/meta` | → mdta keys/ilst (track-level metadata) |
-| `moov/meta (hdlr=nrtm)` | → Sony NRTM XML decoder (`xml ` box or sub-1MB `idat` payload scan) |
+| `moov/meta (hdlr=nrtm)` | → Sony vendor decoder (`xml ` box or sub-1MB `idat` payload scan) |
 | `meta/iloc + iinf/infe + pitm + idat` | → Item extraction → EXIF/XMP decoders |
 | `uuid (XMP GUID)` | → XMP decoder |
 | `uuid (EXIF GUID)` | → EXIF decoder |
@@ -98,6 +96,7 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-DEC-03 | XMP decoder: `encoding/xml` based RDF parser | Same approach as imagemeta | REQ-XMP-* |
 | ARCH-DEC-04 | IPTC decoder: binary record parser with embedded JSON field defs | Same as imagemeta | REQ-IPTC-* |
 | ARCH-DEC-05 | QuickTime decoder: new, ilst iteration + freeform atom parsing | No imagemeta equivalent | REQ-QT-* |
+| ARCH-DEC-08 | Lossless collector stores tags by source + namespace + tag while preserving decode order | Prevents collisions between route families with identical tag names | REQ-API-16, REQ-API-19 |
 | ARCH-DEC-06 | Value converters ported from exiftool's Perl logic | exiftool is reference implementation | REQ-EXIF-05 |
 | ARCH-DEC-07 | Tag names match exiftool output exactly | D-09 | REQ-QT-07 |
 ### Single Package Design
@@ -135,7 +134,7 @@ All code lives in one `videometa` package (no subpackages), following imagemeta'
 | ID | Design element | Traces to |
 |----|----------------|-----------|
 | ARCH-TEST-01 | `go generate ./gen` runs exiftool on committed test videos and regenerates EXIF field tables from the committed manifest | REQ-NF-04 |
-| ARCH-TEST-02 | Tests compare videometa output against committed golden JSON and generated temp-file exiftool oracle output | REQ-NF-04 |
+| ARCH-TEST-02 | Public validation compares videometa output against committed real-file golden JSON; synthetic temp-media tests remain regression-only | REQ-NF-04 |
 | ARCH-TEST-03 | CI runs `go generate ./gen` and diffs both golden JSON and generated EXIF field tables | REQ-NF-10 |
 | ARCH-TEST-04 | Normalization rules for comparison: float precision, string trimming, type coercion | REQ-NF-04 |
 | ARCH-TEST-05 | Dedicated fuzz targets for full MP4 decode, EXIF/XMP/IPTC, and `meta` item parsing on seekable and non-seekable readers | REQ-NF-05 |
@@ -162,4 +161,4 @@ All code lives in one `videometa` package (no subpackages), following imagemeta'
 | Seek past mdat (ARCH-BOX-03) | mdat is AV data, can be gigabytes |
 | Panic-based control flow (ARCH-IO-03) | Readable decoder code; recovered at boundary |
 | exiftool as reference, not imagemeta (ARCH-DEC-06) | More complete edge case handling |
-| Pentax `TAGS` stays on the QuickTime path | Keeps vendor-specific container metadata in the video-native decoder set |
+| Vendor container metadata is a first-class `VENDOR` source | Prevents collisions with standard QuickTime while keeping route identity explicit |

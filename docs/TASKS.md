@@ -24,6 +24,7 @@ Tasks organized by milestone. Each task traces to requirements (`REQ-*`) and arc
 | M16: Integrity Recovery | ✅ Complete |
 | M17: Oracle Evidence Hardening | ✅ Complete |
 | M18: NRTM Streaming Guard | ✅ Complete |
+| M20: Pre-1.0 API Reset | ✅ Complete |
 
 ---
 
@@ -163,14 +164,14 @@ Truthfulness fixes after audit: align docs and validation with the real parser, 
 
 ## Milestone 17: Oracle Evidence Hardening
 
-Truthfulness fixes after the integrity recovery increment: generate the full EXIF field reference, harden `idat` extraction, and separate `Validated` from `Covered` traceability.
+Truthfulness fixes after the integrity recovery increment: generate the full EXIF field reference, harden `idat` extraction, and separate `Validated` from `Implemented` traceability.
 
 | Task | Description | Status | Files |
 |------|-------------|--------|-------|
 | TASK-M17-01 | Generate EXIF field tables from committed reference manifest (`581/32/5`) | ✅ Complete | gen/, metadecoder_exif_fields.go, exif_fields_reference_test.go |
 | TASK-M17-02 | Fix `idat` buffering for non-seekable `meta/iloc` extraction and enforce `idat` extent bounds | ✅ Complete | videodecoder_mp4.go, videodecoder_meta_items.go |
 | TASK-M17-03 | Add temp-file exiftool oracle tests for `meta/iloc` EXIF/XMP and XMP UUID routes | ✅ Complete | videometa_oracle_test.go, testhelpers_test.go |
-| TASK-M17-04 | Update requirements, architecture, CI, and traceability statuses to distinguish `Validated` from `Covered` honestly | ✅ Complete | docs/, .github/workflows/ci.yml |
+| TASK-M17-04 | Update requirements, architecture, CI, and traceability statuses to distinguish `Validated` from `Implemented` honestly | ✅ Complete | docs/, .github/workflows/ci.yml |
 
 ## Milestone 18: NRTM Streaming Guard
 
@@ -191,5 +192,19 @@ Refocus the package on video-native metadata paths and remove image-specific ven
 | Task | Description | Status | Files |
 |------|-------------|--------|-------|
 | TASK-M19-01 | Remove vendor-specific EXIF extension decoding and API surface | ✅ Complete | videometa.go, metadecoder_exif.go |
-| TASK-M19-02 | Reclassify Pentax `TAGS` under QuickTime metadata | ✅ Complete | metadecoder_quicktime_pentax.go, videodecoder_mp4.go |
+| TASK-M19-02 | Reclassify Pentax `TAGS` under vendor container metadata | ✅ Complete | metadecoder_quicktime_pentax.go, videodecoder_mp4.go |
 | TASK-M19-03 | Remove legacy tests/fuzzers/docs tied to the retired EXIF vendor extension path | ✅ Complete | *_test.go, docs/, README.md, CLAUDE.md |
+
+---
+
+## Milestone 20: Pre-1.0 API Reset
+
+Reset the public API before 1.0 so namespace identity, vendor taxonomy, and validation status are stable for the long term.
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M20-01 | Replace flat collected maps with lossless `Tags`/`SourceTags` preserving source + namespace + tag + decode order | ✅ Complete | videometa.go |
+| TASK-M20-02 | Replace `DecodeAll(Options) (Tags, DecodeResult, error)` with `DecodeAll(Options) (Metadata, error)` | ✅ Complete | videometa.go, README.md |
+| TASK-M20-03 | Replace public `XML` source with `VENDOR` and move Sony/Pentax families under it | ✅ Complete | videometa.go, videodecoder_mp4.go, metadecoder_quicktime_pentax.go, metadecoder_sony_nrtm.go |
+| TASK-M20-04 | Make `Namespace` a stable route identity for QuickTime and vendor container metadata | ✅ Complete | videodecoder_mp4.go, metadecoder_quicktime.go, metadecoder_exif.go |
+| TASK-M20-05 | Regress synthetic-only routes from `Validated` to `Implemented` in the requirements matrix | ✅ Complete | docs/REQUIREMENTS.md, requirements_traceability_test.go |

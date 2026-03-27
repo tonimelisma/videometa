@@ -80,7 +80,7 @@ func TestDecodeSonyNRTM(t *testing.T) {
 	bd := &baseDecoder{
 		streamReader: newStreamReader(nil),
 		opts: Options{
-			Sources: XML,
+			Sources: VENDOR,
 			HandleTag: func(ti TagInfo) error {
 				tags = append(tags, ti)
 				return nil
@@ -89,12 +89,12 @@ func TestDecodeSonyNRTM(t *testing.T) {
 		result: &DecodeResult{},
 	}
 	dec := &videoDecoderMP4{baseDecoder: bd}
-	dec.decodeSonyNRTM(strings.NewReader(xml))
+	dec.decodeSonyNRTM(strings.NewReader(xml), "Sony/moov/meta/nrtm")
 
 	tagMap := make(map[string]any)
 	for _, ti := range tags {
-		c.Assert(ti.Source, qt.Equals, XML)
-		c.Assert(ti.Namespace, qt.Equals, "XML")
+		c.Assert(ti.Source, qt.Equals, VENDOR)
+		c.Assert(ti.Namespace, qt.Equals, "Sony/moov/meta/nrtm")
 		tagMap[ti.Tag] = ti.Value
 	}
 
