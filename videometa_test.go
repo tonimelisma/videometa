@@ -227,6 +227,23 @@ func TestTagsGetDateTimeUTC(t *testing.T) {
 	c.Assert(dt.Location(), qt.Equals, time.UTC)
 }
 
+// Validates: REQ-API-13
+func TestTagsGetLatLongRealFile(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/with_gps.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	tags, _, err := decodeAllForTest(Options{R: f, Sources: QUICKTIME})
+	c.Assert(err, qt.IsNil)
+
+	lat, lon, err := tags.GetLatLong()
+	c.Assert(err, qt.IsNil)
+	c.Assert(math.Abs(lat-34.0592) < 0.001, qt.IsTrue, qt.Commentf("lat=%f", lat))
+	c.Assert(math.Abs(lon-(-118.446)) < 0.001, qt.IsTrue, qt.Commentf("lon=%f", lon))
+}
+
 // Validates: REQ-API-10
 func TestDecodeTimeout(t *testing.T) {
 	c := qt.New(t)
@@ -415,6 +432,39 @@ func TestDecodeAllReturnsVideoConfig(t *testing.T) {
 	}
 }
 
+// Validates: REQ-API-19, REQ-API-22
+func TestDecodeAllRealFilePreservesOrderedNamespaceAwareTags(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	metadata, err := DecodeAll(Options{
+		R:       f,
+		Sources: QUICKTIME | CONFIG,
+	})
+	c.Assert(err, qt.IsNil)
+
+	all := metadata.Tags.All()
+	c.Assert(len(all) >= 4, qt.IsTrue)
+	c.Assert(all[0].Namespace, qt.Equals, "ftyp")
+	c.Assert(all[0].Tag, qt.Equals, "MajorBrand")
+	c.Assert(all[1].Namespace, qt.Equals, "ftyp")
+	c.Assert(all[1].Tag, qt.Equals, "MinorVersion")
+
+	timeScale, ok := firstTagInNamespace(metadata.Tags.QuickTime(), "moov/mvhd", "TimeScale")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(timeScale.Value, qt.Equals, uint32(1000))
+
+	compressorID, ok := firstTagInNamespace(metadata.Tags.QuickTime(), "moov/trak[1]/mdia/minf/stbl/stsd/video", "CompressorID")
+	if !ok {
+		compressorID, ok = firstTagInNamespace(metadata.Tags.QuickTime(), "moov/trak[1]/mdia/minf/stbl/stsd", "CompressorID")
+	}
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(compressorID.Value, qt.Equals, "avc1")
+}
+
 // Validates: REQ-API-05, REQ-API-20, REQ-API-21
 func TestDecodeDefaultSourcesIncludeVendorAndConfigButNotComposite(t *testing.T) {
 	c := qt.New(t)
@@ -512,25 +562,25 @@ func TestTagsGetters(t *testing.T) {
 	c.Assert(len(all), qt.Equals, 6)
 }
 
-// Validates: REQ-API-16, REQ-API-19
+// Validates: REQ-API-16, REQ-API-19, REQ-API-22
 func TestTagsPreserveNamespaceCollisions(t *testing.T) {
 	c := qt.New(t)
 
 	var tags Tags
 	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/mvhd", Tag: "HandlerType", Value: "mdir"})
-	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/trak/mdia/hdlr", Tag: "HandlerType", Value: "vide"})
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/trak[1]/mdia/hdlr", Tag: "HandlerType", Value: "vide"})
 	tags.Add(TagInfo{Source: VENDOR, Namespace: "Sony/uuid/USMT", Tag: "TimeZone", Value: -420})
 	tags.Add(TagInfo{Source: VENDOR, Namespace: "Sony/meta/nrtm", Tag: "TimeZone", Value: "PST"})
 
 	c.Assert(len(tags.All()), qt.Equals, 4)
-	c.Assert(tags.QuickTime().Namespaces(), qt.DeepEquals, []string{"moov/mvhd", "moov/trak/mdia/hdlr"})
+	c.Assert(tags.QuickTime().Namespaces(), qt.DeepEquals, []string{"moov/mvhd", "moov/trak[1]/mdia/hdlr"})
 	c.Assert(tags.Vendor().Namespaces(), qt.DeepEquals, []string{"Sony/uuid/USMT", "Sony/meta/nrtm"})
 
-	mvhdTag, ok := tags.QuickTime().Lookup("moov/mvhd", "HandlerType")
+	mvhdTag, ok := firstTagInNamespace(tags.QuickTime(), "moov/mvhd", "HandlerType")
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(mvhdTag.Value, qt.Equals, "mdir")
 
-	trackTag, ok := tags.QuickTime().Lookup("moov/trak/mdia/hdlr", "HandlerType")
+	trackTag, ok := firstTagInNamespace(tags.QuickTime(), "moov/trak[1]/mdia/hdlr", "HandlerType")
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(trackTag.Value, qt.Equals, "vide")
 
@@ -538,6 +588,196 @@ func TestTagsPreserveNamespaceCollisions(t *testing.T) {
 	c.Assert(len(timeZones), qt.Equals, 2)
 	c.Assert(timeZones[0].Namespace, qt.Equals, "Sony/uuid/USMT")
 	c.Assert(timeZones[1].Namespace, qt.Equals, "Sony/meta/nrtm")
+}
+
+// Validates: REQ-API-16, REQ-API-19
+func TestTagsAllPreservesDecodeOrder(t *testing.T) {
+	c := qt.New(t)
+
+	var tags Tags
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "ftyp", Tag: "MajorBrand", Value: "isom"})
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/mvhd", Tag: "TimeScale", Value: uint32(1000)})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: "Pentax/moov/udta/TAGS", Tag: "ISO", Value: 50})
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/trak[1]/tkhd", Tag: "ImageWidth", Value: 320})
+
+	all := tags.All()
+	c.Assert(len(all), qt.Equals, 4)
+	c.Assert(all[0].Tag, qt.Equals, "MajorBrand")
+	c.Assert(all[1].Tag, qt.Equals, "TimeScale")
+	c.Assert(all[2].Tag, qt.Equals, "ISO")
+	c.Assert(all[3].Tag, qt.Equals, "ImageWidth")
+}
+
+// Validates: REQ-API-16, REQ-API-19
+func TestSourceTagsFindPreservesDecodeOrderAcrossNamespaces(t *testing.T) {
+	c := qt.New(t)
+
+	var tags Tags
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/mvhd", Tag: "CreateDate", Value: "movie"})
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/trak[1]/tkhd", Tag: "CreateDate", Value: "track"})
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/trak[1]/mdia/mdhd", Tag: "CreateDate", Value: "media"})
+
+	matches := tags.QuickTime().Find("CreateDate")
+	c.Assert(matches, qt.HasLen, 3)
+	c.Assert(matches[0].Namespace, qt.Equals, "moov/mvhd")
+	c.Assert(matches[1].Namespace, qt.Equals, "moov/trak[1]/tkhd")
+	c.Assert(matches[2].Namespace, qt.Equals, "moov/trak[1]/mdia/mdhd")
+}
+
+// Validates: REQ-API-16, REQ-API-19, REQ-API-22
+func TestNamespaceTagsPreserveDuplicateTagsWithinNamespace(t *testing.T) {
+	c := qt.New(t)
+
+	var tags Tags
+	tags.Add(TagInfo{Source: VENDOR, Namespace: "Sony/uuid/USMT", Tag: "TrackProperty", Value: "16 0 0"})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: "Sony/uuid/USMT", Tag: "TrackProperty", Value: "17 0 0"})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: "Sony/uuid/USMT", Tag: "TimeZone", Value: -420})
+
+	namespace := tags.Vendor().Namespace("Sony/uuid/USMT")
+	c.Assert(namespace.All(), qt.HasLen, 3)
+
+	trackProperties := namespace.Find("TrackProperty")
+	c.Assert(trackProperties, qt.HasLen, 2)
+	c.Assert(trackProperties[0].Value, qt.Equals, "16 0 0")
+	c.Assert(trackProperties[1].Value, qt.Equals, "17 0 0")
+
+	sourceMatches := tags.Vendor().FindInNamespace("Sony/uuid/USMT", "TrackProperty")
+	c.Assert(sourceMatches, qt.DeepEquals, trackProperties)
+}
+
+// Validates: REQ-API-19, REQ-QT-01, REQ-QT-03
+func TestQuickTimeNamespaceContractsRealFile(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/minimal.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	tags, _, err := decodeAllForTest(Options{
+		R:       f,
+		Sources: QUICKTIME | VENDOR,
+	})
+	c.Assert(err, qt.IsNil)
+
+	timeScale, ok := firstTagInNamespace(tags.QuickTime(), "moov/mvhd", "TimeScale")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(timeScale.Value, qt.Equals, uint32(1000))
+
+	handlerType, ok := firstTagInNamespace(tags.QuickTime(), "moov/trak[1]/mdia/hdlr", "HandlerType")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(handlerType.Value, qt.Equals, "vide")
+
+	compressorID, ok := firstTagInNamespace(tags.QuickTime(), "moov/trak[1]/mdia/minf/stbl/stsd", "CompressorID")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(compressorID.Value, qt.Equals, "avc1")
+
+	if _, err := os.Stat("testdata/apple.mov"); os.IsNotExist(err) {
+		t.Skip("testdata/apple.mov not present")
+	}
+
+	appleFile, err := os.Open("testdata/apple.mov")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = appleFile.Close() }()
+
+	appleTags, _, err := decodeAllForTest(Options{
+		R:       appleFile,
+		Sources: QUICKTIME,
+	})
+	c.Assert(err, qt.IsNil)
+
+	makeTag, ok := firstTagInNamespace(appleTags.QuickTime(), "moov/meta/keys", "Make")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(makeTag.Value, qt.Equals, "Apple")
+}
+
+// Validates: REQ-API-19, REQ-QT-01
+func TestVendorNamespaceContractsRealFiles(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/exiftool_quicktime.mov")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	tags, _, err := decodeAllForTest(Options{
+		R:       f,
+		Sources: VENDOR,
+	})
+	c.Assert(err, qt.IsNil)
+
+	iso, ok := firstTagInNamespace(tags.Vendor(), "Pentax/moov/udta/TAGS", "ISO")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(iso.Value, qt.Equals, 50)
+
+	exposure, ok := firstTagInNamespace(tags.Vendor(), "Pentax/moov/udta/TAGS", "ExposureTime")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(math.Abs(exposure.Value.(float64)-0.0260416666666667) < 0.0001, qt.IsTrue)
+
+	if _, err := os.Stat("testdata/sony_a6700.mp4"); os.IsNotExist(err) {
+		t.Skip("testdata/sony_a6700.mp4 not present")
+	}
+
+	sonyFile, err := os.Open("testdata/sony_a6700.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = sonyFile.Close() }()
+
+	sonyTags, _, err := decodeAllForTest(Options{
+		R:       sonyFile,
+		Sources: VENDOR,
+	})
+	c.Assert(err, qt.IsNil)
+
+	timeZone, ok := firstTagInNamespace(sonyTags.Vendor(), "Sony/uuid/USMT", "TimeZone")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(timeZone.Value, qt.Equals, -420)
+
+	trackProperties := sonyTags.Vendor().Namespace("Sony/uuid/USMT").Find("TrackProperty")
+	c.Assert(trackProperties, qt.HasLen, 3)
+	c.Assert(trackProperties[0].Value, qt.Equals, "1 0 0")
+	c.Assert(trackProperties[1].Value, qt.Equals, "1 0 0")
+	c.Assert(trackProperties[2].Value, qt.Equals, "16 0 0")
+
+	deviceModel, ok := firstTagInNamespace(sonyTags.Vendor(), "Sony/meta/nrtm", "DeviceModelName")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(deviceModel.Value, qt.Equals, "ILCE-6700")
+}
+
+// Validates: REQ-API-19
+func TestCompositePrefersVendorMetadata(t *testing.T) {
+	c := qt.New(t)
+
+	var tags Tags
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/udta/meta/ilst/----", Tag: "FNumber", Value: 2.8})
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/udta/meta/ilst/----", Tag: "ExposureTime", Value: 0.01})
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/udta/meta/ilst/----", Tag: "FocalLength", Value: 35.0})
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/udta/meta/ilst/----", Tag: "ISO", Value: 100})
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/udta/meta/ilst/----", Tag: "LensModel", Value: "QuickTime Lens"})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: "Pentax/moov/udta/TAGS", Tag: "FNumber", Value: 4.0})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: "Pentax/moov/udta/TAGS", Tag: "ExposureTime", Value: 0.025})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: "Pentax/moov/udta/TAGS", Tag: "FocalLength", Value: 18.9})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: "Pentax/moov/udta/TAGS", Tag: "ISO", Value: 50})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: "Pentax/moov/udta/TAGS", Tag: "LensModel", Value: "Vendor Lens"})
+
+	computeComposite(&tags, VideoConfig{
+		Width:    1920,
+		Height:   1080,
+		Rotation: 90,
+	})
+
+	aperture, ok := firstTagInNamespace(tags.Composite(), "Composite", "Aperture")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(aperture.Value, qt.Equals, 4.0)
+
+	shutter, ok := firstTagInNamespace(tags.Composite(), "Composite", "ShutterSpeed")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(shutter.Value, qt.Equals, 0.025)
+
+	focal, ok := firstTagInNamespace(tags.Composite(), "Composite", "FocalLength35efl")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(focal.Value, qt.Equals, 18.9)
+
+	lensID, ok := firstTagInNamespace(tags.Composite(), "Composite", "LensID")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(lensID.Value, qt.Equals, "Vendor Lens")
 }
 
 // Validates: REQ-API-13

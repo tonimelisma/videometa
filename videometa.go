@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -260,31 +259,50 @@ type sourceLookupKey struct {
 	tag       string
 }
 
+type namespaceTagCollection struct {
+	ordered []TagInfo
+	byTag   map[string][]TagInfo
+}
+
+func newNamespaceTagCollection() *namespaceTagCollection {
+	return &namespaceTagCollection{
+		byTag: make(map[string][]TagInfo),
+	}
+}
+
+func (c *namespaceTagCollection) add(tag TagInfo) {
+	c.ordered = append(c.ordered, tag)
+	c.byTag[tag.Tag] = append(c.byTag[tag.Tag], tag)
+}
+
 type sourceTagCollection struct {
-	ordered         []TagInfo
-	namespaceOrder  []string
-	namespaceLookup map[string]map[string]TagInfo
-	byTag           map[string][]TagInfo
-	lookup          map[sourceLookupKey]TagInfo
+	ordered        []TagInfo
+	namespaceOrder []string
+	namespaces     map[string]*namespaceTagCollection
+	byTag          map[string][]TagInfo
+	byNamespaceTag map[sourceLookupKey][]TagInfo
 }
 
 func newSourceTagCollection() *sourceTagCollection {
 	return &sourceTagCollection{
-		namespaceLookup: make(map[string]map[string]TagInfo),
-		byTag:           make(map[string][]TagInfo),
-		lookup:          make(map[sourceLookupKey]TagInfo),
+		namespaces:     make(map[string]*namespaceTagCollection),
+		byTag:          make(map[string][]TagInfo),
+		byNamespaceTag: make(map[sourceLookupKey][]TagInfo),
 	}
 }
 
 func (c *sourceTagCollection) add(tag TagInfo) {
 	c.ordered = append(c.ordered, tag)
-	if _, found := c.namespaceLookup[tag.Namespace]; !found {
-		c.namespaceLookup[tag.Namespace] = make(map[string]TagInfo)
+	namespaceTags, found := c.namespaces[tag.Namespace]
+	if !found {
+		namespaceTags = newNamespaceTagCollection()
+		c.namespaces[tag.Namespace] = namespaceTags
 		c.namespaceOrder = append(c.namespaceOrder, tag.Namespace)
 	}
-	c.namespaceLookup[tag.Namespace][tag.Tag] = tag
+	namespaceTags.add(tag)
 	c.byTag[tag.Tag] = append(c.byTag[tag.Tag], tag)
-	c.lookup[sourceLookupKey{namespace: tag.Namespace, tag: tag.Tag}] = tag
+	key := sourceLookupKey{namespace: tag.Namespace, tag: tag.Tag}
+	c.byNamespaceTag[key] = append(c.byNamespaceTag[key], tag)
 }
 
 // Tags collects decoded metadata for convenient access via DecodeAll.
@@ -296,6 +314,11 @@ type Tags struct {
 // SourceTags exposes lossless, namespace-aware access to tags from one source.
 type SourceTags struct {
 	collection *sourceTagCollection
+}
+
+// NamespaceTags exposes lossless access to tags from one namespace.
+type NamespaceTags struct {
+	collection *namespaceTagCollection
 }
 
 // Add stores a tag while preserving source, namespace, tag, and decode order.
@@ -361,25 +384,24 @@ func (s SourceTags) Namespaces() []string {
 	return slices.Clone(s.collection.namespaceOrder)
 }
 
-// Namespace returns the tags in one namespace keyed by tag name.
-func (s SourceTags) Namespace(name string) map[string]TagInfo {
+// Namespace returns a lossless subview over one namespace.
+func (s SourceTags) Namespace(name string) NamespaceTags {
 	if s.collection == nil {
-		return nil
+		return NamespaceTags{}
 	}
-	namespaceTags, found := s.collection.namespaceLookup[name]
+	namespaceTags, found := s.collection.namespaces[name]
 	if !found {
-		return nil
+		return NamespaceTags{}
 	}
-	return maps.Clone(namespaceTags)
+	return NamespaceTags{collection: namespaceTags}
 }
 
-// Lookup finds a tag by exact namespace and tag name.
-func (s SourceTags) Lookup(namespace, tag string) (TagInfo, bool) {
+// FindInNamespace finds all tags by exact namespace and tag name in decode order.
+func (s SourceTags) FindInNamespace(namespace, tag string) []TagInfo {
 	if s.collection == nil {
-		return TagInfo{}, false
+		return nil
 	}
-	ti, found := s.collection.lookup[sourceLookupKey{namespace: namespace, tag: tag}]
-	return ti, found
+	return slices.Clone(s.collection.byNamespaceTag[sourceLookupKey{namespace: namespace, tag: tag}])
 }
 
 // Find finds all tags with the given tag name across namespaces in decode order.
@@ -388,6 +410,22 @@ func (s SourceTags) Find(tag string) []TagInfo {
 		return nil
 	}
 	return slices.Clone(s.collection.byTag[tag])
+}
+
+// All returns all tags in this namespace in decode order.
+func (n NamespaceTags) All() []TagInfo {
+	if n.collection == nil {
+		return nil
+	}
+	return slices.Clone(n.collection.ordered)
+}
+
+// Find finds all tags with the given name in this namespace in decode order.
+func (n NamespaceTags) Find(tag string) []TagInfo {
+	if n.collection == nil {
+		return nil
+	}
+	return slices.Clone(n.collection.byTag[tag])
 }
 
 func firstTagInfo(sourceTags SourceTags, keys ...string) (TagInfo, bool) {

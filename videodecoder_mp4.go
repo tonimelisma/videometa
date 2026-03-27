@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -49,6 +50,8 @@ type videoDecoderMP4 struct {
 	movieTimescale     uint32 // From mvhd, used for tkhd TrackDuration conversion.
 	mediaTimescale     uint32 // From mdhd, used for stts frame rate calculation.
 	currentHandlerType string // Handler type of current track ("vide", "soun", etc.). Reset per track.
+	currentTrackIndex  int    // 1-based track ordinal for namespace disambiguation.
+	nextTrackIndex     int
 	mdatOffset         int64  // Start offset of mdat box (0 if not seen).
 	mdatSize           uint64 // Size of mdat box payload.
 	quickTimeNamespace string
@@ -69,6 +72,13 @@ func (d *videoDecoderMP4) emitVendorTag(namespace, name string, value any) {
 		Namespace: namespace,
 		Value:     value,
 	})
+}
+
+func (d *videoDecoderMP4) trackNamespace(namespace string) string {
+	if d.currentTrackIndex == 0 || !strings.HasPrefix(namespace, "moov/trak") {
+		return namespace
+	}
+	return fmt.Sprintf("moov/trak[%d]%s", d.currentTrackIndex, strings.TrimPrefix(namespace, "moov/trak"))
 }
 
 func (d *videoDecoderMP4) decode() error {
@@ -321,6 +331,12 @@ func (d *videoDecoderMP4) decodeMvhd() {
 func (d *videoDecoderMP4) decodeTrak(trakStart int64, trakSize uint64) {
 	// Reset per-track state so audio/video detection starts fresh.
 	d.currentHandlerType = ""
+	d.nextTrackIndex++
+	prevTrackIndex := d.currentTrackIndex
+	d.currentTrackIndex = d.nextTrackIndex
+	defer func() {
+		d.currentTrackIndex = prevTrackIndex
+	}()
 
 	trakEnd := boxEnd(trakStart, trakSize)
 	for d.pos() < trakEnd {
@@ -342,7 +358,7 @@ func (d *videoDecoderMP4) decodeTrak(trakStart int64, trakSize uint64) {
 		case "uuid":
 			d.decodeUUID(startPos, boxSize)
 		case "meta":
-			d.decodeMeta(startPos, boxSize, "moov/trak/meta")
+			d.decodeMeta(startPos, boxSize, d.trackNamespace("moov/trak/meta"))
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
@@ -351,7 +367,7 @@ func (d *videoDecoderMP4) decodeTrak(trakStart int64, trakSize uint64) {
 
 // decodeTkhd parses the track header box (tkhd).
 func (d *videoDecoderMP4) decodeTkhd() {
-	restore := d.withQuickTimeNamespace("moov/trak/tkhd")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/tkhd"))
 	defer restore()
 
 	version := d.read1()
@@ -456,7 +472,7 @@ func (d *videoDecoderMP4) decodeTapt(taptStart int64, taptSize uint64) {
 // Layout: version+flags(4), width(4 fixed 16.16), height(4 fixed 16.16).
 // Emits as "W H" string matching exiftool format.
 func (d *videoDecoderMP4) decodeTaptDimension(tagName string) {
-	restore := d.withQuickTimeNamespace("moov/trak/tapt")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/tapt"))
 	defer restore()
 
 	_ = d.readBytes(4) // version + flags
@@ -485,7 +501,7 @@ func (d *videoDecoderMP4) decodeMdia(mdiaStart int64, mdiaSize uint64) {
 		case "mdhd":
 			d.decodeMdhd()
 		case "hdlr":
-			d.decodeHdlr(startPos, boxSize)
+			d.decodeHdlr(startPos, boxSize, d.trackNamespace("moov/trak/mdia/hdlr"))
 		case "minf":
 			d.decodeMinf(startPos, boxSize)
 		}
@@ -496,7 +512,7 @@ func (d *videoDecoderMP4) decodeMdia(mdiaStart int64, mdiaSize uint64) {
 
 // decodeMdhd parses the media header box.
 func (d *videoDecoderMP4) decodeMdhd() {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/mdhd")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/mdhd"))
 	defer restore()
 
 	version := d.read1()
@@ -539,10 +555,10 @@ func (d *videoDecoderMP4) decodeMdhd() {
 	}
 }
 
-// decodeHdlr parses the handler reference box in mdia.
+// decodeHdlr parses a handler reference box.
 // Emits HandlerClass, HandlerType, and HandlerDescription.
-func (d *videoDecoderMP4) decodeHdlr(hdlrStart int64, hdlrSize uint64) {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/hdlr")
+func (d *videoDecoderMP4) decodeHdlr(hdlrStart int64, hdlrSize uint64, namespace string) {
+	restore := d.withQuickTimeNamespace(namespace)
 	defer restore()
 
 	_ = d.readBytes(4) // version + flags
@@ -604,7 +620,7 @@ func (d *videoDecoderMP4) decodeMinf(minfStart int64, minfSize uint64) {
 			d.decodeSmhd()
 		case "hdlr":
 			// QuickTime minf contains a data handler reference hdlr (comp_type "dhlr").
-			d.decodeHdlr(startPos, boxSize)
+			d.decodeHdlr(startPos, boxSize, d.trackNamespace("moov/trak/mdia/minf/hdlr"))
 		case "stbl":
 			d.decodeStbl(startPos, boxSize)
 		case "gmhd":
@@ -617,7 +633,7 @@ func (d *videoDecoderMP4) decodeMinf(minfStart int64, minfSize uint64) {
 
 // decodeVmhd parses the video media header box.
 func (d *videoDecoderMP4) decodeVmhd() {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/minf/vmhd")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/vmhd"))
 	defer restore()
 
 	_ = d.readBytes(4) // version + flags
@@ -634,7 +650,7 @@ func (d *videoDecoderMP4) decodeVmhd() {
 
 // decodeSmhd parses the sound media header box.
 func (d *videoDecoderMP4) decodeSmhd() {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/minf/smhd")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/smhd"))
 	defer restore()
 
 	_ = d.readBytes(4) // version + flags
@@ -669,7 +685,7 @@ func (d *videoDecoderMP4) decodeStbl(stblStart int64, stblSize uint64) {
 
 // decodeStts parses the sample-to-time box to derive VideoFrameRate.
 func (d *videoDecoderMP4) decodeStts() {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/minf/stbl/stts")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stts"))
 	defer restore()
 
 	_ = d.readBytes(4) // version + flags
@@ -705,7 +721,7 @@ func (d *videoDecoderMP4) decodeStts() {
 // decodeStsd parses the sample description box, branching on handler type
 // to parse either visual (video) or audio sample entries.
 func (d *videoDecoderMP4) decodeStsd(stsdStart int64, stsdSize uint64) {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/minf/stbl/stsd")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd"))
 	defer restore()
 
 	_ = d.readBytes(4) // version + flags
@@ -760,7 +776,7 @@ func (d *videoDecoderMP4) decodeStsd(stsdStart int64, stsdSize uint64) {
 // but in QuickTime they carry version(2), revision(2), vendor(4), temporal_quality(4),
 // spatial_quality(4). We read vendor as VendorID for MOV files.
 func (d *videoDecoderMP4) decodeVisualSampleEntry(entryStart int64, entrySize uint32) {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/minf/stbl/stsd/video")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/video"))
 	defer restore()
 
 	_ = d.read2()              // version (pre_defined in ISO)
@@ -826,7 +842,7 @@ func (d *videoDecoderMP4) decodeVisualSampleEntry(entryStart int64, entrySize ui
 // Handles QuickTime V0 and V1 audio sample entries.
 // Emits AudioChannels, AudioBitsPerSample, and AudioSampleRate.
 func (d *videoDecoderMP4) decodeAudioSampleEntry(entryStart int64, entrySize uint32) {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/minf/stbl/stsd/audio")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/audio"))
 	defer restore()
 
 	// QuickTime audio sample entry: version(2)+revision(2)+vendor(4) = 8 bytes.
@@ -875,7 +891,7 @@ func (d *videoDecoderMP4) decodeAudioSampleEntry(entryStart int64, entrySize uin
 // decodeWave parses the wave (sound data format) box inside audio sample entries.
 // Extracts PurchaseFileFormat from the frma (original format) sub-box.
 func (d *videoDecoderMP4) decodeWave(waveStart int64, waveSize uint64) {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/minf/stbl/stsd/audio/wave")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/audio/wave"))
 	defer restore()
 
 	waveEnd := boxEnd(waveStart, waveSize)
@@ -897,7 +913,7 @@ func (d *videoDecoderMP4) decodeWave(waveStart int64, waveSize uint64) {
 
 // decodePasp parses the pixel aspect ratio box.
 func (d *videoDecoderMP4) decodePasp() {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/minf/stbl/stsd/pasp")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/pasp"))
 	defer restore()
 
 	hSpacing := d.read4()
@@ -909,7 +925,7 @@ func (d *videoDecoderMP4) decodePasp() {
 
 // decodeBtrt parses the bitrate box.
 func (d *videoDecoderMP4) decodeBtrt() {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/minf/stbl/stsd/btrt")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/btrt"))
 	defer restore()
 
 	bufferSize := d.read4()
@@ -1540,7 +1556,7 @@ func (d *videoDecoderMP4) decodeMTDT(payloadLen int) {
 
 // decodeTref iterates the track reference box, handling cdsc (content describes).
 func (d *videoDecoderMP4) decodeTref(trefStart int64, trefSize uint64) {
-	restore := d.withQuickTimeNamespace("moov/trak/tref")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/tref"))
 	defer restore()
 
 	trefEnd := boxEnd(trefStart, trefSize)
@@ -1565,7 +1581,7 @@ func (d *videoDecoderMP4) decodeTref(trefStart int64, trefSize uint64) {
 
 // decodeGmhd parses the generic media header container (QuickTime-specific).
 func (d *videoDecoderMP4) decodeGmhd(gmhdStart int64, gmhdSize uint64) {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/minf/gmhd")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/gmhd"))
 	defer restore()
 
 	gmhdEnd := boxEnd(gmhdStart, gmhdSize)
@@ -1584,7 +1600,7 @@ func (d *videoDecoderMP4) decodeGmhd(gmhdStart int64, gmhdSize uint64) {
 
 // decodeGmin parses the generic media information header (gmin) box.
 func (d *videoDecoderMP4) decodeGmin() {
-	restore := d.withQuickTimeNamespace("moov/trak/mdia/minf/gmhd/gmin")
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/gmhd/gmin"))
 	defer restore()
 
 	version := d.read1()

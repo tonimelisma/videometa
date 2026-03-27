@@ -214,14 +214,14 @@ func TestGoldenMinimalMP4(t *testing.T) {
 		[]string{"QuickTime", "Composite"})
 }
 
-// Validates: REQ-NF-04, REQ-QT-07, REQ-TEST-01
+// Validates: REQ-NF-04, REQ-QT-06, REQ-QT-07, REQ-TEST-01
 func TestGoldenWithGPS(t *testing.T) {
 	c := qt.New(t)
 	testGoldenExhaustive(c, "testdata/with_gps.mp4", "testdata/with_gps.mp4.exiftool.json",
 		[]string{"QuickTime", "Composite"})
 }
 
-// Validates: REQ-NF-04, REQ-QT-04, REQ-XMP-04
+// Validates: REQ-NF-04, REQ-QT-01, REQ-QT-02, REQ-QT-03, REQ-QT-04, REQ-XMP-04
 func TestGoldenExifToolQuickTimeMOV(t *testing.T) {
 	c := qt.New(t)
 	testGoldenExhaustive(c, "testdata/exiftool_quicktime.mov", "testdata/exiftool_quicktime.mov.exiftool.json",

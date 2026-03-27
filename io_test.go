@@ -117,7 +117,7 @@ func TestStreamReaderSkipSeekable(t *testing.T) {
 	c.Assert(sr.read1(), qt.Equals, uint8(0x42))
 }
 
-// Validates: ARCH-IO-05
+// Validates: ARCH-IO-05, REQ-API-03
 func TestStreamReaderSkipNonSeekable(t *testing.T) {
 	c := qt.New(t)
 	data := []byte{0x00, 0x00, 0x00, 0x00, 0x42}

@@ -50,6 +50,14 @@ func flattenAllTags(tags Tags) map[string]TagInfo {
 	return flat
 }
 
+func firstTagInNamespace(sourceTags SourceTags, namespace string, tag string) (TagInfo, bool) {
+	matches := sourceTags.FindInNamespace(namespace, tag)
+	if len(matches) == 0 {
+		return TagInfo{}, false
+	}
+	return matches[0], true
+}
+
 func buildMP4WithEXIFUUID(exifPayload []byte) []byte {
 	var buf bytes.Buffer
 	buf.Write(buildFTYPBox())
@@ -103,6 +111,13 @@ func buildMP4WithSonyNRTMIDAT(payload []byte) []byte {
 	ftyp := buildFTYPBox()
 	meta := buildMetaBox(buildMetaHdlr("nrtm", "Sony NRTM"), buildBox("idat", payload))
 	return append(ftyp, meta...)
+}
+
+func buildMP4WithLargeMdat(payloadSize int) []byte {
+	ftyp := buildFTYPBox()
+	mdat := buildBox("mdat", bytes.Repeat([]byte("M"), payloadSize))
+	moov := buildBox("moov", buildMinimalMvhdPayload(1000, 5000))
+	return append(append(ftyp, mdat...), moov...)
 }
 
 func buildFTYPBox() []byte {
@@ -312,6 +327,28 @@ func buildBox(boxType string, payload []byte) []byte {
 	buf.WriteString(boxType)
 	buf.Write(payload)
 	return buf.Bytes()
+}
+
+func buildMinimalMvhdPayload(timescale uint32, duration uint32) []byte {
+	var payload bytes.Buffer
+	payload.Write([]byte{0, 0, 0, 0}) // version + flags
+	_ = binary.Write(&payload, binary.BigEndian, uint32(0))
+	_ = binary.Write(&payload, binary.BigEndian, uint32(0))
+	_ = binary.Write(&payload, binary.BigEndian, timescale)
+	_ = binary.Write(&payload, binary.BigEndian, duration)
+	_ = binary.Write(&payload, binary.BigEndian, uint32(0x00010000)) // rate = 1.0
+	_ = binary.Write(&payload, binary.BigEndian, uint16(0x0100))     // volume = 1.0
+	payload.Write(make([]byte, 10))                                  // reserved
+
+	matrix := make([]byte, 36)
+	matrix[3] = 1
+	matrix[4+12+3] = 1
+	matrix[8+24] = 0x40
+	payload.Write(matrix)
+
+	payload.Write(make([]byte, 24)) // preview/poster/selection/current time
+	_ = binary.Write(&payload, binary.BigEndian, uint32(1))
+	return buildBox("mvhd", payload.Bytes())
 }
 
 // slowReader wraps an io.ReadSeeker and adds delay to each Read call.
