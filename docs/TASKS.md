@@ -25,6 +25,7 @@ Tasks organized by milestone. Each task traces to requirements (`REQ-*`) and arc
 | M17: Oracle Evidence Hardening | ✅ Complete |
 | M18: NRTM Streaming Guard | ✅ Complete |
 | M20: Pre-1.0 API Reset | ✅ Complete |
+| M21: API Hardening + Evidence Policy | ✅ Complete |
 
 ---
 
@@ -208,3 +209,16 @@ Reset the public API before 1.0 so namespace identity, vendor taxonomy, and vali
 | TASK-M20-03 | Replace public `XML` source with `VENDOR` and move Sony/Pentax families under it | ✅ Complete | videometa.go, videodecoder_mp4.go, metadecoder_quicktime_pentax.go, metadecoder_sony_nrtm.go |
 | TASK-M20-04 | Make `Namespace` a stable route identity for QuickTime and vendor container metadata | ✅ Complete | videodecoder_mp4.go, metadecoder_quicktime.go, metadecoder_exif.go |
 | TASK-M20-05 | Regress synthetic-only routes from `Validated` to `Implemented` in the requirements matrix | ✅ Complete | docs/REQUIREMENTS.md, requirements_traceability_test.go |
+
+---
+
+## Milestone 21: API Hardening + Evidence Policy
+
+Finish the pre-1.0 surface cleanup: make namespace queries fully lossless, freeze namespace formatting, add streaming allocation guards, and tighten the public support story around real fixtures.
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M21-01 | Strengthen traceability enforcement so cited tests must exist, carry `// Validates:` coverage, and `Validated` rows require real-fixture evidence | ✅ Complete | requirements_traceability_test.go, docs/REQUIREMENTS.md |
+| TASK-M21-02 | Replace lossy namespace maps with lossless `NamespaceTags`, preserve duplicate tags within a namespace, and add explicit namespace-contract tests using real files | ✅ Complete | videometa.go, videometa_test.go, videodecoder_mp4.go |
+| TASK-M21-03 | Add allocation guards for representative streaming-sensitive paths (`mdat`, Sony NRTM `idat`, `meta/iloc`) | ✅ Complete | videometa_alloc_test.go, testhelpers_test.go |
+| TASK-M21-04 | Add README examples, support table, and compatibility note that align public claims with validated real-fixture coverage | ✅ Complete | README.md, example_test.go, docs/ARCHITECTURE.md, docs/REQUIREMENTS.md |

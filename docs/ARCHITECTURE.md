@@ -31,7 +31,7 @@ io.ReadSeeker (or io.Reader fallback)
 
 | ID | File | Purpose | Traces to |
 |----|------|---------|-----------|
-| ARCH-FILE-01 | `videometa.go` | Public API: Decode, DecodeAll, Metadata, Options, TagInfo, Tags, SourceTags, Source, VideoFormat, DecodeResult, VideoConfig | REQ-API-* |
+| ARCH-FILE-01 | `videometa.go` | Public API: Decode, DecodeAll, Metadata, Options, TagInfo, Tags, SourceTags, NamespaceTags, Source, VideoFormat, DecodeResult, VideoConfig | REQ-API-* |
 | ARCH-FILE-02 | `io.go` | streamReader: binary reads, byte-order, seek, buffer pool, panic control flow | REQ-NF-01, REQ-NF-02 |
 | ARCH-FILE-03 | `videodecoder_mp4.go` | ISOBMFF box parser + metadata routing, including bounded Sony NRTM `idat` XML scans | REQ-BOX-* |
 | ARCH-FILE-03A | `videodecoder_meta_items.go` | `meta/iloc` item parsing, `idat` construction-method validation, non-seekable `idat` buffering, and EXIF/XMP item extraction | REQ-EXIF-06, REQ-XMP-04 |
@@ -96,12 +96,19 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-DEC-03 | XMP decoder: `encoding/xml` based RDF parser | Same approach as imagemeta | REQ-XMP-* |
 | ARCH-DEC-04 | IPTC decoder: binary record parser with embedded JSON field defs | Same as imagemeta | REQ-IPTC-* |
 | ARCH-DEC-05 | QuickTime decoder: new, ilst iteration + freeform atom parsing | No imagemeta equivalent | REQ-QT-* |
-| ARCH-DEC-08 | Lossless collector stores tags by source + namespace + tag while preserving decode order | Prevents collisions between route families with identical tag names | REQ-API-16, REQ-API-19 |
+| ARCH-DEC-08 | Lossless collector stores tags by source + namespace + tag + occurrence order, exposed via `SourceTags` and `NamespaceTags` | Prevents collisions and silent overwrites, including repeated tags inside a single namespace | REQ-API-16, REQ-API-19, REQ-API-22 |
 | ARCH-DEC-06 | Value converters ported from exiftool's Perl logic | exiftool is reference implementation | REQ-EXIF-05 |
 | ARCH-DEC-07 | Tag names match exiftool output exactly | D-09 | REQ-QT-07 |
 ### Single Package Design
 
 All code lives in one `videometa` package (no subpackages), following imagemeta's pattern. This keeps the API simple and avoids import cycles.
+
+### Namespace Contract
+
+- QuickTime/container namespaces are exact route identities with 1-based track ordinals where needed, e.g. `moov/trak[1]/mdia/hdlr`.
+- Vendor namespaces use `VendorName/route`, e.g. `Pentax/moov/udta/TAGS`, `Sony/uuid/USMT`, `Sony/meta/nrtm`.
+- `SourceTags.Namespace(name)` returns a lossless `NamespaceTags` view.
+- Repeated tags inside one namespace remain queryable in decode order via `NamespaceTags.Find()` and `SourceTags.FindInNamespace()`.
 
 ---
 
@@ -136,9 +143,9 @@ All code lives in one `videometa` package (no subpackages), following imagemeta'
 | ARCH-TEST-01 | `go generate ./gen` runs exiftool on committed test videos and regenerates EXIF field tables from the committed manifest | REQ-NF-04 |
 | ARCH-TEST-02 | Public validation compares videometa output against committed real-file golden JSON; synthetic temp-media tests remain regression-only | REQ-NF-04 |
 | ARCH-TEST-03 | CI runs `go generate ./gen` and diffs both golden JSON and generated EXIF field tables | REQ-NF-10 |
-| ARCH-TEST-04 | Normalization rules for comparison: float precision, string trimming, type coercion | REQ-NF-04 |
+| ARCH-TEST-04 | Normalization rules for comparison: float precision, string trimming, type coercion, and test-local flattening needed to compare against exiftool's lossy grouped JSON | REQ-NF-04 |
 | ARCH-TEST-05 | Dedicated fuzz targets for full MP4 decode, EXIF/XMP/IPTC, and `meta` item parsing on seekable and non-seekable readers | REQ-NF-05 |
-| ARCH-TEST-06 | Benchmarks: per-source, all-sources, per-file-type | REQ-NF-03 |
+| ARCH-TEST-06 | Benchmarks and allocation guards for representative streaming-sensitive paths | REQ-NF-03, REQ-NF-01 |
 
 ---
 

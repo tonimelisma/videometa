@@ -52,6 +52,9 @@ metadata, err := videometa.DecodeAll(videometa.Options{R: f})
 tags := metadata.Tags
 _ = metadata.VideoConfig // Contains width, height, duration, codec, rotation
 
+// Namespace-aware access: no lossy flattening.
+timeScale := tags.QuickTime().Namespace("moov/mvhd").Find("TimeScale")[0]
+
 // Get creation time (priority: EXIF > XMP > QuickTime > IPTC)
 dt, _ := tags.GetDateTime()
 
@@ -87,6 +90,34 @@ result, err := videometa.Decode(videometa.Options{
 | `CONFIG` | Request flag for `VideoConfig`; not emitted as tags |
 | `COMPOSITE` | Derived tags materialized only by `DecodeAll` |
 
+## Namespace Contract
+
+`TagInfo.Namespace` is part of the public API. It is a stable route identity, not a display label.
+
+Examples:
+
+- `moov/mvhd`
+- `moov/trak[1]/mdia/hdlr`
+- `moov/meta/keys`
+- `Pentax/moov/udta/TAGS`
+- `Sony/uuid/USMT`
+
+Collected tags are lossless:
+
+- `Tags.All()` preserves decode order
+- `SourceTags.Namespace(name).All()` preserves decode order inside one namespace
+- repeated tags in the same namespace remain accessible via `Find`, rather than being overwritten
+
+## Support Policy
+
+Public support claims in this README are backed by real video fixtures only.
+
+| Family | Current claim |
+|--------|---------------|
+| QuickTime/container-native metadata on committed fixtures | Validated |
+| Vendor container metadata on committed fixtures (`Pentax/moov/udta/TAGS`, Sony UUID/NRTM, Apple MOV mdta) | Validated |
+| Additional embedded routes implemented in code and regression tests | Not promoted to README-level claims until real-fixture validation exists |
+
 ## Benchmarks
 
 ```
@@ -97,6 +128,17 @@ BenchmarkDecodeMinimalMP4ConfigOnly-8     672285    1803 ns/op     608 B/op     
 ## Status
 
 v0.1.0 development snapshot — ISOBMFF box parser, EXIF, XMP, IPTC, QuickTime native, vendor metadata families (Pentax `TAGS`, Sony UUID-PROF, Sony USMT/MTDT, Sony NRTM), and Apple MOV metadata are implemented. Validation status is real-file-only; synthetic tests remain regression coverage only and do not justify support claims.
+
+## Compatibility Policy
+
+Before `v1.0.0`, the API may change when the model improves. After `v1.0.0`, these become compatibility commitments:
+
+- `Decode`, `DecodeAll`, `Metadata`, `Tags`, `SourceTags`, and `NamespaceTags`
+- `Source` names
+- tag names
+- namespace formats
+
+Validation status in the docs is not an API guarantee and may change as real fixtures are added.
 
 ## License
 
