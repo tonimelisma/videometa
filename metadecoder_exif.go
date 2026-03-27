@@ -148,7 +148,7 @@ func (ed *metaDecoderEXIF) decodeTags(d *videoDecoderMP4, namespace string, fiel
 	}
 
 	// Emit accumulated GPS coordinates after processing all tags.
-	if namespace == "GPSInfoIFD" {
+	if namespace == "IFD0/GPSInfoIFD" || strings.HasSuffix(namespace, "/GPSInfoIFD") {
 		ed.emitGPSCoordinates(d)
 	}
 }
@@ -177,7 +177,11 @@ func (ed *metaDecoderEXIF) decodeTag(d *videoDecoderMP4, namespace string, field
 		case "InteropIFD":
 			subFields = exifInteropFields
 		}
-		ed.decodeTags(d, subIFDName, subFields)
+		nextNamespace := subIFDName
+		if namespace != "" {
+			nextNamespace = namespace + "/" + subIFDName
+		}
+		ed.decodeTags(d, nextNamespace, subFields)
 		ed.seek(nextTagPos)
 		return
 	}
@@ -219,12 +223,13 @@ func (ed *metaDecoderEXIF) decodeTag(d *videoDecoderMP4, namespace string, field
 	}
 
 	// Accumulate GPS fields for later coordinate conversion.
-	if namespace == "GPSInfoIFD" {
+	if namespace == "IFD0/GPSInfoIFD" || strings.HasSuffix(namespace, "/GPSInfoIFD") {
 		ed.accumulateGPS(tagID, value)
 	}
 
 	// Skip raw GPS coordinate arrays — we emit converted decimal degrees instead.
-	if namespace == "GPSInfoIFD" && (tagID == 0x0002 || tagID == 0x0004) {
+	if (namespace == "IFD0/GPSInfoIFD" || strings.HasSuffix(namespace, "/GPSInfoIFD")) &&
+		(tagID == 0x0002 || tagID == 0x0004) {
 		return
 	}
 
@@ -401,21 +406,21 @@ func (ed *metaDecoderEXIF) emitGPSCoordinates(d *videoDecoderMP4) {
 		if strings.EqualFold(ed.gpsLatRef, "S") {
 			lat = -lat
 		}
-		d.emitEXIFTag("GPSLatitude", "GPSInfoIFD", lat)
+		d.emitEXIFTag("GPSLatitude", "IFD0/GPSInfoIFD", lat)
 	}
 	if ed.hasGPSLon {
 		lon := convertDegreesToDecimal(ed.gpsLon[0], ed.gpsLon[1], ed.gpsLon[2])
 		if strings.EqualFold(ed.gpsLonRef, "W") {
 			lon = -lon
 		}
-		d.emitEXIFTag("GPSLongitude", "GPSInfoIFD", lon)
+		d.emitEXIFTag("GPSLongitude", "IFD0/GPSInfoIFD", lon)
 	}
 	if ed.hasGPSAlt {
 		alt := ed.gpsAlt
 		if ed.gpsAltRef == 1 {
 			alt = -alt
 		}
-		d.emitEXIFTag("GPSAltitude", "GPSInfoIFD", alt)
+		d.emitEXIFTag("GPSAltitude", "IFD0/GPSInfoIFD", alt)
 	}
 }
 

@@ -3,16 +3,16 @@
 [![CI](https://github.com/tonimelisma/videometa/actions/workflows/ci.yml/badge.svg)](https://github.com/tonimelisma/videometa/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/tonimelisma/videometa.svg)](https://pkg.go.dev/github.com/tonimelisma/videometa)
 
-Pure Go library for reading metadata from video files. Extracts EXIF, XMP, IPTC, QuickTime native, and manufacturer-specific container metadata from MP4/MOV files. All output matches `exiftool -n -json` for the supported video metadata paths.
+Pure Go library for reading metadata from video files. Extracts EXIF, XMP, IPTC, QuickTime native, and vendor-specific container metadata from MP4/MOV files. All output matches `exiftool -n -json` for the supported video metadata paths.
 
 ## Features
 
 - **Pure Go** — no CGo, no external binaries, `CGO_ENABLED=0` compatible
 - **Read-only** — metadata extraction only, no writing
 - **MP4/MOV** — ISOBMFF container support (covers ~95% of smartphone video)
-- **Multiple sources** — EXIF, XMP, IPTC, QuickTime native metadata, codec/config info
+- **Multiple sources** — EXIF, XMP, IPTC, QuickTime native metadata, vendor container metadata, codec/config info
 - **Streaming** — never loads entire files into memory; seeks past mdat
-- **Validated** — output tested against exiftool via golden files
+- **Validated** — public support claims are backed by real-file exiftool goldens
 - **Fuzz-tested** — no panics on malformed input
 
 ## Installation
@@ -48,8 +48,9 @@ fmt.Printf("Video: %dx%d, codec=%s\n",
 f, _ := os.Open("video.mp4")
 defer f.Close()
 
-tags, result, err := videometa.DecodeAll(videometa.Options{R: f})
-_ = result // Contains VideoConfig (width, height, duration, codec, rotation)
+metadata, err := videometa.DecodeAll(videometa.Options{R: f})
+tags := metadata.Tags
+_ = metadata.VideoConfig // Contains width, height, duration, codec, rotation
 
 // Get creation time (priority: EXIF > XMP > QuickTime > IPTC)
 dt, _ := tags.GetDateTime()
@@ -81,10 +82,10 @@ result, err := videometa.Decode(videometa.Options{
 | `EXIF` | EXIF IFD data (camera info, GPS, exposure) |
 | `XMP` | XMP/RDF XML metadata |
 | `IPTC` | IPTC-IIM records (keywords, captions) |
-| `QUICKTIME` | QuickTime native metadata (ilst atoms, freeform keys) |
-| `CONFIG` | Container structure info (dimensions, duration, codec) |
-| `XML` | Structured XML metadata (Sony NonRealTimeMeta) |
-| `COMPOSITE` | Derived tags computed from other metadata |
+| `QUICKTIME` | Standard/container-native QuickTime metadata |
+| `VENDOR` | Vendor-specific container metadata families (Pentax `TAGS`, Sony UUID/NRTM) |
+| `CONFIG` | Request flag for `VideoConfig`; not emitted as tags |
+| `COMPOSITE` | Derived tags materialized only by `DecodeAll` |
 
 ## Benchmarks
 
@@ -95,7 +96,7 @@ BenchmarkDecodeMinimalMP4ConfigOnly-8     672285    1803 ns/op     608 B/op     
 
 ## Status
 
-v0.1.0 development snapshot — ISOBMFF box parser, EXIF, XMP, IPTC, QuickTime native, `meta/iloc` EXIF/XMP item extraction, Pentax `TAGS`, Sony XAVC (UUID-PROF, USMT/MTDT, NRTM XML), and Apple MOV metadata are implemented. Real-file golden coverage is maintained for the committed fixtures; synthetic end-to-end tests cover the `meta/iloc` paths.
+v0.1.0 development snapshot — ISOBMFF box parser, EXIF, XMP, IPTC, QuickTime native, vendor metadata families (Pentax `TAGS`, Sony UUID-PROF, Sony USMT/MTDT, Sony NRTM), and Apple MOV metadata are implemented. Validation status is real-file-only; synthetic tests remain regression coverage only and do not justify support claims.
 
 ## License
 

@@ -32,7 +32,10 @@ const (
 )
 
 // decodeIlst parses the ilst (item list) box containing QuickTime metadata atoms.
-func (d *videoDecoderMP4) decodeIlst(ilstStart int64, ilstSize uint64) {
+func (d *videoDecoderMP4) decodeIlst(ilstStart int64, ilstSize uint64, namespace string) {
+	restore := d.withQuickTimeNamespace(namespace)
+	defer restore()
+
 	ilstEnd := boxEnd(ilstStart, ilstSize)
 	for d.pos() < ilstEnd {
 		atomStart := d.pos()
@@ -46,7 +49,7 @@ func (d *videoDecoderMP4) decodeIlst(ilstStart int64, ilstSize uint64) {
 
 		if atomTypeStr == "----" {
 			// Freeform atom: mean + name + data sub-atoms.
-			d.decodeFreeformAtom(atomStart, atomSize)
+			d.decodeFreeformAtom(atomStart, atomSize, namespace+"/----")
 		} else {
 			// Standard ilst atom: look up tag name and parse data.
 			tagName := ilstAtomToTagName(atomTypeStr)
@@ -117,7 +120,10 @@ func (d *videoDecoderMP4) decodeIlstAtomData(atomStart int64, atomSize uint64, t
 }
 
 // decodeFreeformAtom parses a freeform (----) atom with mean, name, and data sub-atoms.
-func (d *videoDecoderMP4) decodeFreeformAtom(atomStart int64, atomSize uint64) {
+func (d *videoDecoderMP4) decodeFreeformAtom(atomStart int64, atomSize uint64, namespace string) {
+	restore := d.withQuickTimeNamespace(namespace)
+	defer restore()
+
 	atomEnd := boxEnd(atomStart, atomSize)
 	var mean, name string
 

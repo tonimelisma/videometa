@@ -23,6 +23,33 @@ func readerSeekerFromBytes(data []byte) io.ReadSeeker {
 	return bytes.NewReader(data)
 }
 
+func decodeAllForTest(opts Options) (Tags, VideoConfig, error) {
+	metadata, err := DecodeAll(opts)
+	return metadata.Tags, metadata.VideoConfig, err
+}
+
+func flattenSourceTags(sourceTags SourceTags) map[string]TagInfo {
+	return flattenSourceTagsWhere(sourceTags, func(TagInfo) bool { return true })
+}
+
+func flattenSourceTagsWhere(sourceTags SourceTags, keep func(TagInfo) bool) map[string]TagInfo {
+	flat := make(map[string]TagInfo)
+	for _, tag := range sourceTags.All() {
+		if keep(tag) {
+			flat[tag.Tag] = tag
+		}
+	}
+	return flat
+}
+
+func flattenAllTags(tags Tags) map[string]TagInfo {
+	flat := make(map[string]TagInfo)
+	for _, tag := range tags.All() {
+		flat[tag.Tag] = tag
+	}
+	return flat
+}
+
 func buildMP4WithEXIFUUID(exifPayload []byte) []byte {
 	var buf bytes.Buffer
 	buf.Write(buildFTYPBox())

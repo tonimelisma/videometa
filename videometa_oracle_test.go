@@ -73,7 +73,8 @@ func TestMetaIlocIDATExtentPastBoxWarnsAndSkips(t *testing.T) {
 	data := buildMP4WithMetaIDATItem(itemPayload, buildInfeEXIF(1), buildIlocIDAT(1, uint32(len(itemPayload)+1)))
 
 	tags, warnings := decodeAllWithWarnings(c, data, EXIF)
-	c.Assert(tags.EXIF()["Make"], qt.Equals, TagInfo{})
+	_, found := flattenSourceTags(tags.EXIF())["Make"]
+	c.Assert(found, qt.IsFalse)
 	c.Assert(anyWarningContains(warnings, "exceeds idat box bounds"), qt.IsTrue, qt.Commentf("warnings: %v", warnings))
 }
 
@@ -88,7 +89,8 @@ func TestMetaIlocUnsupportedConstructionMethodWarnsAndSkips(t *testing.T) {
 	}))
 
 	tags, warnings := decodeAllWithWarnings(c, data, EXIF)
-	c.Assert(tags.EXIF()["Make"], qt.Equals, TagInfo{})
+	_, found := flattenSourceTags(tags.EXIF())["Make"]
+	c.Assert(found, qt.IsFalse)
 	c.Assert(anyWarningContains(warnings, "construction method 2"), qt.IsTrue, qt.Commentf("warnings: %v", warnings))
 }
 
@@ -101,7 +103,7 @@ func testTempOracleExhaustive(t *testing.T, c *qt.C, fileName string, data []byt
 		decodeInput = readerFactory(data)
 	}
 
-	tags, _, err := DecodeAll(Options{
+	tags, _, err := decodeAllForTest(Options{
 		R:       decodeInput,
 		Sources: sources,
 	})
@@ -160,7 +162,7 @@ func decodeAllWithWarnings(c *qt.C, data []byte, sources Source) (Tags, []string
 	c.Helper()
 
 	var warnings []string
-	tags, _, err := DecodeAll(Options{
+	tags, _, err := decodeAllForTest(Options{
 		R:       readerSeekerFromBytes(data),
 		Sources: sources,
 		Warnf: func(format string, args ...any) {

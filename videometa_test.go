@@ -119,10 +119,10 @@ func TestDecodeAll(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = f.Close() }()
 
-	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
+	tags, _, err := decodeAllForTest(Options{R: f, Sources: QUICKTIME})
 	c.Assert(err, qt.IsNil)
 
-	all := tags.All()
+	all := flattenAllTags(tags)
 	c.Assert(all["TimeScale"].Value, qt.Equals, uint32(1000))
 	c.Assert(all["ImageWidth"].Value, qt.Equals, 320)
 }
@@ -155,11 +155,21 @@ func TestSourceBitmask(t *testing.T) {
 	c.Assert(s.Has(EXIF), qt.IsTrue)
 	c.Assert(s.Has(XMP), qt.IsTrue)
 	c.Assert(s.Has(IPTC), qt.IsFalse)
+	c.Assert(s.Has(VENDOR), qt.IsFalse)
 	c.Assert(s.Has(COMPOSITE), qt.IsFalse)
 
 	s = s.Remove(EXIF)
 	c.Assert(s.Has(EXIF), qt.IsFalse)
 	c.Assert(s.Has(XMP), qt.IsTrue)
+}
+
+// Validates: REQ-API-05
+func TestSourceString(t *testing.T) {
+	c := qt.New(t)
+
+	c.Assert(EXIF.String(), qt.Equals, "EXIF")
+	c.Assert((EXIF | VENDOR | CONFIG).String(), qt.Equals, "EXIF|VENDOR|CONFIG")
+	c.Assert(Source(0).String(), qt.Equals, "0")
 }
 
 // Validates: REQ-API-04
@@ -187,7 +197,7 @@ func TestTagsGetDateTime(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = f.Close() }()
 
-	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
+	tags, _, err := decodeAllForTest(Options{R: f, Sources: QUICKTIME})
 	c.Assert(err, qt.IsNil)
 
 	dt, err := tags.GetDateTime()
@@ -208,7 +218,7 @@ func TestTagsGetDateTimeUTC(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = f.Close() }()
 
-	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
+	tags, _, err := decodeAllForTest(Options{R: f, Sources: QUICKTIME})
 	c.Assert(err, qt.IsNil)
 
 	dt, err := tags.GetDateTimeUTC()
@@ -395,11 +405,59 @@ func TestDecodeAllReturnsVideoConfig(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = f.Close() }()
 
-	_, result, err := DecodeAll(Options{R: f, Sources: QUICKTIME | CONFIG})
+	metadata, err := DecodeAll(Options{R: f, Sources: QUICKTIME | CONFIG})
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.VideoConfig.Width, qt.Equals, 320)
-	c.Assert(result.VideoConfig.Height, qt.Equals, 240)
-	c.Assert(result.VideoConfig.Codec, qt.Equals, "avc1")
+	c.Assert(metadata.VideoConfig.Width, qt.Equals, 320)
+	c.Assert(metadata.VideoConfig.Height, qt.Equals, 240)
+	c.Assert(metadata.VideoConfig.Codec, qt.Equals, "avc1")
+	for _, tag := range metadata.Tags.All() {
+		c.Assert(tag.Source, qt.Not(qt.Equals), CONFIG)
+	}
+}
+
+// Validates: REQ-API-05, REQ-API-20, REQ-API-21
+func TestDecodeDefaultSourcesIncludeVendorAndConfigButNotComposite(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/exiftool_quicktime.mov")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	var sawVendor bool
+	var sawComposite bool
+	result, err := Decode(Options{
+		R: f,
+		HandleTag: func(ti TagInfo) error {
+			if ti.Source == VENDOR {
+				sawVendor = true
+			}
+			if ti.Source == COMPOSITE {
+				sawComposite = true
+			}
+			return nil
+		},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(sawVendor, qt.IsTrue)
+	c.Assert(sawComposite, qt.IsFalse)
+	c.Assert(result.VideoConfig.Codec, qt.Equals, "jpeg")
+}
+
+// Validates: REQ-API-05, REQ-API-20, REQ-API-21
+func TestDecodeAllDefaultSourcesIncludeComposite(t *testing.T) {
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/with_gps.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	metadata, err := DecodeAll(Options{R: f})
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(metadata.Tags.Composite().All()) > 0, qt.IsTrue)
+	c.Assert(metadata.VideoConfig.Codec, qt.Equals, "avc1")
+	for _, tag := range metadata.Tags.All() {
+		c.Assert(tag.Source, qt.Not(qt.Equals), CONFIG)
+	}
 }
 
 // Validates: REQ-API-09, REQ-EXIF-06
@@ -440,20 +498,46 @@ func TestTagsGetters(t *testing.T) {
 	tags.Add(TagInfo{Source: XMP, Tag: "Creator", Value: "Test"})
 	tags.Add(TagInfo{Source: IPTC, Tag: "City", Value: "NYC"})
 	tags.Add(TagInfo{Source: QUICKTIME, Tag: "Duration", Value: 5.0})
-	tags.Add(TagInfo{Source: CONFIG, Tag: "Width", Value: 1920})
-	tags.Add(TagInfo{Source: XML, Tag: "DeviceModel", Value: "A7"})
+	tags.Add(TagInfo{Source: VENDOR, Tag: "DeviceModel", Namespace: "Sony/moov/meta/nrtm", Value: "A7"})
 	tags.Add(TagInfo{Source: COMPOSITE, Tag: "ImageSize", Value: "1920 1080"})
 
-	c.Assert(tags.EXIF()["Make"].Value, qt.Equals, "Canon")
-	c.Assert(tags.XMP()["Creator"].Value, qt.Equals, "Test")
-	c.Assert(tags.IPTC()["City"].Value, qt.Equals, "NYC")
-	c.Assert(tags.QuickTime()["Duration"].Value, qt.Equals, 5.0)
-	c.Assert(tags.Config()["Width"].Value, qt.Equals, 1920)
-	c.Assert(tags.XML()["DeviceModel"].Value, qt.Equals, "A7")
-	c.Assert(tags.Composite()["ImageSize"].Value, qt.Equals, "1920 1080")
+	c.Assert(flattenSourceTags(tags.EXIF())["Make"].Value, qt.Equals, "Canon")
+	c.Assert(flattenSourceTags(tags.XMP())["Creator"].Value, qt.Equals, "Test")
+	c.Assert(flattenSourceTags(tags.IPTC())["City"].Value, qt.Equals, "NYC")
+	c.Assert(flattenSourceTags(tags.QuickTime())["Duration"].Value, qt.Equals, 5.0)
+	c.Assert(flattenSourceTags(tags.Vendor())["DeviceModel"].Value, qt.Equals, "A7")
+	c.Assert(flattenSourceTags(tags.Composite())["ImageSize"].Value, qt.Equals, "1920 1080")
 
 	all := tags.All()
-	c.Assert(len(all), qt.Equals, 7)
+	c.Assert(len(all), qt.Equals, 6)
+}
+
+// Validates: REQ-API-16, REQ-API-19
+func TestTagsPreserveNamespaceCollisions(t *testing.T) {
+	c := qt.New(t)
+
+	var tags Tags
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/mvhd", Tag: "HandlerType", Value: "mdir"})
+	tags.Add(TagInfo{Source: QUICKTIME, Namespace: "moov/trak/mdia/hdlr", Tag: "HandlerType", Value: "vide"})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: "Sony/uuid/USMT", Tag: "TimeZone", Value: -420})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: "Sony/meta/nrtm", Tag: "TimeZone", Value: "PST"})
+
+	c.Assert(len(tags.All()), qt.Equals, 4)
+	c.Assert(tags.QuickTime().Namespaces(), qt.DeepEquals, []string{"moov/mvhd", "moov/trak/mdia/hdlr"})
+	c.Assert(tags.Vendor().Namespaces(), qt.DeepEquals, []string{"Sony/uuid/USMT", "Sony/meta/nrtm"})
+
+	mvhdTag, ok := tags.QuickTime().Lookup("moov/mvhd", "HandlerType")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(mvhdTag.Value, qt.Equals, "mdir")
+
+	trackTag, ok := tags.QuickTime().Lookup("moov/trak/mdia/hdlr", "HandlerType")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(trackTag.Value, qt.Equals, "vide")
+
+	timeZones := tags.Vendor().Find("TimeZone")
+	c.Assert(len(timeZones), qt.Equals, 2)
+	c.Assert(timeZones[0].Namespace, qt.Equals, "Sony/uuid/USMT")
+	c.Assert(timeZones[1].Namespace, qt.Equals, "Sony/meta/nrtm")
 }
 
 // Validates: REQ-API-13
@@ -493,7 +577,7 @@ func TestHandleTagFieldsPopulated(t *testing.T) {
 		HandleTag: func(ti TagInfo) error {
 			if ti.Tag == "TimeScale" {
 				c.Assert(ti.Source, qt.Equals, QUICKTIME)
-				c.Assert(ti.Namespace, qt.Equals, "QuickTime")
+				c.Assert(ti.Namespace, qt.Equals, "moov/mvhd")
 				c.Assert(ti.Tag, qt.Equals, "TimeScale")
 				c.Assert(ti.Value, qt.Equals, uint32(1000))
 				found = true
@@ -586,12 +670,12 @@ func TestQuickTimeCreationDateTimezone(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = f.Close() }()
 
-	tags, _, err := DecodeAll(Options{R: f, Sources: QUICKTIME})
+	tags, _, err := decodeAllForTest(Options{R: f, Sources: QUICKTIME})
 	c.Assert(err, qt.IsNil)
 
-	cd, ok := tags.QuickTime()["CreationDate"]
-	c.Assert(ok, qt.IsTrue)
-	cdStr := toString(cd.Value)
+	matches := tags.QuickTime().Find("CreationDate")
+	c.Assert(len(matches) > 0, qt.IsTrue)
+	cdStr := toString(matches[len(matches)-1].Value)
 	c.Assert(cdStr, qt.Contains, "-07:00",
 		qt.Commentf("CreationDate should preserve timezone, got %q", cdStr))
 }
@@ -604,30 +688,31 @@ func TestTagsSeparateBySource(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = f.Close() }()
 
-	tags, _, err := DecodeAll(Options{
+	tags, _, err := decodeAllForTest(Options{
 		R:       f,
-		Sources: QUICKTIME | XMP,
+		Sources: QUICKTIME | XMP | VENDOR,
 	})
 	c.Assert(err, qt.IsNil)
 
 	// QuickTime-sourced tags.
-	qtTags := tags.QuickTime()
+	qtTags := flattenSourceTags(tags.QuickTime())
 	c.Assert(len(qtTags) > 0, qt.IsTrue, qt.Commentf("no QuickTime tags"))
 	_, hasTimeScale := qtTags["TimeScale"]
 	c.Assert(hasTimeScale, qt.IsTrue, qt.Commentf("QuickTime should have TimeScale"))
 
-	// Pentax TAGS are reclassified under QuickTime.
-	_, hasISO := qtTags["ISO"]
-	c.Assert(hasISO, qt.IsTrue, qt.Commentf("QuickTime should have ISO"))
+	// Pentax TAGS are reclassified under Vendor.
+	vendorTags := flattenSourceTags(tags.Vendor())
+	_, hasISO := vendorTags["ISO"]
+	c.Assert(hasISO, qt.IsTrue, qt.Commentf("Vendor should have ISO"))
 
 	// XMP-sourced tags.
-	xmpTags := tags.XMP()
+	xmpTags := flattenSourceTags(tags.XMP())
 	c.Assert(len(xmpTags) > 0, qt.IsTrue, qt.Commentf("no XMP tags"))
 
-	// Tags from different sources don't collide — each source has its own map.
+	// Tags from different namespaces do not collide in the collected view.
 	allTags := tags.All()
 	c.Assert(len(allTags) > len(qtTags), qt.IsTrue,
-		qt.Commentf("All() should contain more tags than QuickTime alone"))
+		qt.Commentf("All() should contain more tags than flattened QuickTime alone"))
 }
 
 // Validates: REQ-API-18
@@ -640,7 +725,7 @@ func TestBestEffortPartial(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = f.Close() }()
 
-	tags, _, decodeErr := DecodeAll(Options{
+	tags, _, decodeErr := decodeAllForTest(Options{
 		R:       readerOnly{f},
 		Sources: QUICKTIME | CONFIG,
 	})
@@ -649,7 +734,7 @@ func TestBestEffortPartial(t *testing.T) {
 	// via io.CopyN, so decode succeeds fully.
 	c.Assert(decodeErr, qt.IsNil,
 		qt.Commentf("5KB non-fast-start file should decode fully even without seeking"))
-	all := tags.All()
+	all := flattenAllTags(tags)
 	_, hasMajorBrand := all["MajorBrand"]
 	c.Assert(hasMajorBrand, qt.IsTrue,
 		qt.Commentf("ftyp tags should be emitted"))
@@ -777,7 +862,7 @@ func TestSeedCorpusDecodesSuccessfully(t *testing.T) {
 			tagCount := 0
 			_, err = Decode(Options{
 				R:       f,
-				Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
+				Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG,
 				HandleTag: func(ti TagInfo) error {
 					tagCount++
 					return nil

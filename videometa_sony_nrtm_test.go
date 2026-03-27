@@ -38,14 +38,15 @@ func TestDecodeSonyNRTMFromMetaIDAT(t *testing.T) {
 	payload := append([]byte("BINARY_PREFIX\x00\x00"), []byte(minimalSonyNRTMXML())...)
 	data := buildMP4WithSonyNRTMIDAT(payload)
 
-	tags, _, err := DecodeAll(Options{
+	tags, _, err := decodeAllForTest(Options{
 		R:       readerSeekerFromBytes(data),
-		Sources: XML,
+		Sources: VENDOR,
 	})
 	c.Assert(err, qt.IsNil)
-	c.Assert(tags.XML()["DeviceManufacturer"].Value, qt.Equals, "Sony")
-	c.Assert(tags.XML()["DeviceModelName"].Value, qt.Equals, "RouteCam")
-	c.Assert(tags.XML()["DeviceSerialNo"].Value, qt.Equals, 12345)
+	vendorTags := flattenSourceTags(tags.Vendor())
+	c.Assert(vendorTags["DeviceManufacturer"].Value, qt.Equals, "Sony")
+	c.Assert(vendorTags["DeviceModelName"].Value, qt.Equals, "RouteCam")
+	c.Assert(vendorTags["DeviceSerialNo"].Value, qt.Equals, 12345)
 }
 
 // Validates: REQ-NF-01
@@ -56,12 +57,12 @@ func TestDecodeSonyNRTMLargeMetaIDATDoesNotBufferForXMLOnly(t *testing.T) {
 	data := buildMP4WithSonyNRTMIDAT(payload)
 	reader := newCountingReadSeeker(data)
 
-	tags, _, err := DecodeAll(Options{
+	tags, _, err := decodeAllForTest(Options{
 		R:       reader,
-		Sources: XML,
+		Sources: VENDOR,
 	})
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(tags.XML()), qt.Equals, 0)
+	c.Assert(len(tags.Vendor().All()), qt.Equals, 0)
 	c.Assert(reader.bytesRead < 128*1024, qt.IsTrue,
 		qt.Commentf("expected large idat to be skipped via seek without reading payload, read %d bytes", reader.bytesRead))
 }
@@ -73,10 +74,10 @@ func TestDecodeSonyNRTMLargeMetaIDATReaderOnlyStillStreams(t *testing.T) {
 	payload := bytes.Repeat([]byte("N"), 2<<20)
 	data := buildMP4WithSonyNRTMIDAT(payload)
 
-	tags, _, err := DecodeAll(Options{
+	tags, _, err := decodeAllForTest(Options{
 		R:       readerOnly{bytes.NewReader(data)},
-		Sources: XML,
+		Sources: VENDOR,
 	})
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(tags.XML()), qt.Equals, 0)
+	c.Assert(len(tags.Vendor().All()), qt.Equals, 0)
 }

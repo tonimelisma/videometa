@@ -9,7 +9,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | ID | Decision | Choice |
 |----|----------|--------|
 | D-01 | Runtime dependencies | Zero runtime dependencies |
-| D-02 | Tag overlap handling | Report all tags separately (like exiftool); convenience methods deduplicate with priority |
+| D-02 | Tag overlap handling | Preserve all tags by source + namespace + tag; convenience methods apply explicit precedence |
 | D-03 | VideoFormat enum | Single MP4 value; auto-detect MOV vs MP4 internally from ftyp brand |
 | D-04 | Format detection | Optional — auto-detect from ftyp if not specified |
 | D-05 | EXIF tag scope | Committed core EXIF field reference: 581 EXIF tags, 32 GPS tags, 5 Interop tags |
@@ -24,7 +24,9 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | D-16 | Timestamp type | Go time.Time; preserve original timezone; GetDateTimeUTC() convenience |
 | D-17 | Partial reads | Best-effort mode — succeed if moov at start, return partial + error if not |
 | D-18 | XMP extensions | Main packet only (skip extended XMP) |
-| D-19 | Convenience API | HandleTag callback + DecodeAll() returning Tags struct |
+| D-19 | Convenience API | HandleTag callback + DecodeAll() returning `Metadata{Tags, VideoConfig}` |
+| D-23 | Source taxonomy | `QUICKTIME` for standard/container-native routes, `VENDOR` for vendor-specific container metadata families |
+| D-24 | Validation policy | `Validated` requires real media fixtures only; synthetic tests are regression coverage only |
 | D-20 | No-metadata files | Return empty result, no error |
 | D-21 | Decoder approach | Implement from specs; exiftool logic as reference; can copy imagemeta code we authored |
 | D-22 | Traceability | REQ-* → ARCH-* → source file → test (bidirectional) |
@@ -45,10 +47,10 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | ID | Requirement | Decision ref |
 |----|-------------|-------------|
 | REQ-API-01 | `Decode(Options) (DecodeResult, error)` entry point | — |
-| REQ-API-02 | `DecodeAll(Options) (Tags, error)` convenience wrapper | D-19 |
+| REQ-API-02 | `DecodeAll(Options) (Metadata, error)` convenience wrapper | D-19 |
 | REQ-API-03 | `Options.R` accepts `io.ReadSeeker`; `io.Reader` fallback with degraded performance | D-10 |
 | REQ-API-04 | `Options.VideoFormat` optional; auto-detect from ftyp if omitted | D-03, D-04 |
-| REQ-API-05 | `Source` bitmask: `EXIF \| XMP \| IPTC \| QUICKTIME \| CONFIG \| XML \| COMPOSITE` | — |
+| REQ-API-05 | `Source` bitmask: `EXIF \| IPTC \| XMP \| QUICKTIME \| VENDOR \| CONFIG \| COMPOSITE` | D-23 |
 | REQ-API-06 | `HandleTag` callback receives `TagInfo{Source, Tag, Namespace, Value}` | — |
 | REQ-API-07 | `ShouldHandleTag` filter, `LimitNumTags`, `LimitTagSize` | — |
 | REQ-API-08 | `HandleXMP` escape hatch for custom XMP processing | — |
@@ -59,7 +61,10 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-API-13 | `Tags.GetLatLong()` returns (lat, lon float64) in decimal degrees | D-12 |
 | REQ-API-14 | `DecodeResult.VideoConfig` with Width, Height, Duration, Rotation, Codec | D-13 |
 | REQ-API-15 | `ErrStopWalking` sentinel for early termination | — |
-| REQ-API-16 | All tags reported separately by source (no dedup); convenience methods apply priority | D-02 |
+| REQ-API-16 | Collected tags preserve source + namespace + tag + decode order; no lossy flattening in the public API | D-02 |
+| REQ-API-19 | `Tags.All()` returns ordered `[]TagInfo`; per-source access is namespace-aware (`SourceTags`) | D-02, D-19 |
+| REQ-API-20 | `CONFIG` is a request flag for `DecodeResult.VideoConfig`, not a tag group | D-13, D-19 |
+| REQ-API-21 | `COMPOSITE` is output-only from `DecodeAll`; `Decode` never emits composite tags | D-19 |
 | REQ-API-17 | Empty result (no error) when file has no metadata | D-20 |
 | REQ-API-18 | Best-effort partial mode for files where moov position is unknown | D-17 |
 
@@ -89,7 +94,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-EXIF-03 | Support all standard EXIF types (BYTE through DOUBLE) |
 | REQ-EXIF-04 | Core EXIF field reference generated from `gen/exif_fields_reference.json`: 581 EXIF tags, 32 GPS tags, 5 Interop tags with exact exiftool 13.50 names (D-05) |
 | REQ-EXIF-05 | Value converters matching exiftool behavior (APEX-to-f-number, GPS degrees-to-decimal, etc.) |
-| REQ-EXIF-06 | Locate EXIF in MP4 via UUID box or meta/iloc items; unsupported embedded vendor image-extension payloads are skipped |
+| REQ-EXIF-06 | Locate EXIF in MP4 via UUID box or meta/iloc items; validation is tracked per route, and unsupported embedded vendor image-extension payloads are skipped |
 
 ### XMP (`REQ-XMP-*`)
 
@@ -98,7 +103,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-XMP-01 | Decode XMP/RDF XML (attributes, seq/bag/alt lists) |
 | REQ-XMP-02 | Handle namespace URIs |
 | REQ-XMP-03 | Parse GPS coordinates from XMP format (DMS and decimal) |
-| REQ-XMP-04 | Locate XMP in MP4 via UUID box (BE7ACFCB-97A9-42E8-9C71-999491E3AFAC), `udta/XMP_`, or meta/iloc items |
+| REQ-XMP-04 | Locate XMP in MP4 via UUID box (BE7ACFCB-97A9-42E8-9C71-999491E3AFAC), `udta/XMP_`, or meta/iloc items; validation is tracked per route |
 | REQ-XMP-05 | Main XMP packet only; skip extended XMP (D-18) |
 | REQ-XMP-06 | Support HandleXMP escape hatch |
 
@@ -174,8 +179,8 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 Mapping REQ-* → ARCH-* → source file → test file. Updated as implementation proceeds.
 
 Status terms used below:
-- `Validated`: fully backed by the cited tests. For metadata parity paths, this means committed exiftool golden tests or generated temp-file exiftool oracle tests.
-- `Covered`: exported-path deterministic tests exist, but live exiftool parity evidence is still incomplete for at least one claimed route or vendor.
+- `Validated`: fully backed by the cited tests using real media fixtures only (committed or documented local real files).
+- `Implemented`: code exists and has unit/fuzz/regression coverage, but no qualifying real-file evidence exists yet for the claimed route.
 - `Static`, `Config`, and `Pending` keep their usual meanings.
 
 | Requirement | Architecture | Source File | Test File | Status |
@@ -196,6 +201,9 @@ Status terms used below:
 | REQ-API-14 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
 | REQ-API-15 | ARCH-ERR-02 | videometa.go | videometa_test.go | Validated |
 | REQ-API-16 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-19 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-20 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
+| REQ-API-21 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
 | REQ-API-17 | ARCH-ERR-05 | videometa.go | videometa_test.go | Validated |
 | REQ-API-18 | ARCH-ERR-05 | videometa.go, videodecoder_mp4.go | videometa_test.go | Validated |
 | REQ-BOX-01 | ARCH-BOX-02 | videodecoder_mp4.go | videometa_test.go | Validated |
@@ -206,39 +214,39 @@ Status terms used below:
 | REQ-BOX-06 | ARCH-BOX-05 | videodecoder_mp4.go | videometa_test.go | Validated |
 | REQ-BOX-07 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
 | REQ-BOX-08 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
-| REQ-EXIF-01 | ARCH-DEC-02 | metadecoder_exif.go | metadecoder_exif_test.go | Validated |
-| REQ-EXIF-02 | ARCH-DEC-02, ARCH-IO-02 | metadecoder_exif.go, io.go | metadecoder_exif_test.go | Validated |
-| REQ-EXIF-03 | ARCH-DEC-02 | metadecoder_exif.go | metadecoder_exif_test.go | Validated |
-| REQ-EXIF-04 | ARCH-DEC-02 | metadecoder_exif_fields.go | exif_fields_reference_test.go | Validated |
-| REQ-EXIF-05 | ARCH-DEC-06 | metadecoder_exif.go, helpers.go | metadecoder_exif_test.go, helpers_test.go | Validated |
-| REQ-EXIF-06 | ARCH-BOX-04 | videodecoder_mp4.go, videodecoder_meta_items.go | videometa_test.go, videometa_meta_items_test.go, videometa_oracle_test.go | Validated (meta/iloc); Covered (UUID) |
-| REQ-XMP-01 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
-| REQ-XMP-02 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
-| REQ-XMP-03 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
-| REQ-XMP-04 | ARCH-BOX-04 | videodecoder_mp4.go, videodecoder_meta_items.go | videometa_golden_test.go, videometa_meta_items_test.go, videometa_oracle_test.go | Validated |
-| REQ-XMP-05 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
-| REQ-XMP-06 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Validated |
-| REQ-IPTC-01 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go | Validated |
-| REQ-IPTC-02 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go | Validated |
-| REQ-IPTC-03 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go | Validated |
-| REQ-IPTC-04 | ARCH-DEC-04 | metadecoder_exif.go, metadecoder_iptc.go | metadecoder_iptc_test.go | Validated |
-| REQ-QT-01 | ARCH-DEC-05 | metadecoder_quicktime.go | metadecoder_quicktime_test.go | Validated |
-| REQ-QT-02 | ARCH-DEC-05 | metadecoder_quicktime.go | metadecoder_quicktime_test.go | Validated |
-| REQ-QT-03 | ARCH-DEC-05 | metadecoder_quicktime.go | metadecoder_quicktime_test.go | Validated |
+| REQ-EXIF-01 | ARCH-DEC-02 | metadecoder_exif.go | metadecoder_exif_test.go | Implemented |
+| REQ-EXIF-02 | ARCH-DEC-02, ARCH-IO-02 | metadecoder_exif.go, io.go | metadecoder_exif_test.go | Implemented |
+| REQ-EXIF-03 | ARCH-DEC-02 | metadecoder_exif.go | metadecoder_exif_test.go | Implemented |
+| REQ-EXIF-04 | ARCH-DEC-02 | metadecoder_exif_fields.go | exif_fields_reference_test.go | Implemented |
+| REQ-EXIF-05 | ARCH-DEC-06 | metadecoder_exif.go, helpers.go | metadecoder_exif_test.go, helpers_test.go | Implemented |
+| REQ-EXIF-06 | ARCH-BOX-04 | videodecoder_mp4.go, videodecoder_meta_items.go | videometa_test.go, videometa_meta_items_test.go, videometa_oracle_test.go | Implemented |
+| REQ-XMP-01 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Implemented |
+| REQ-XMP-02 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Implemented |
+| REQ-XMP-03 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Implemented |
+| REQ-XMP-04 | ARCH-BOX-04 | videodecoder_mp4.go, videodecoder_meta_items.go | videometa_golden_test.go, videometa_meta_items_test.go, videometa_oracle_test.go | Validated (`udta/XMP_` real files); Implemented (UUID, meta/iloc) |
+| REQ-XMP-05 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Implemented |
+| REQ-XMP-06 | ARCH-DEC-03 | metadecoder_xmp.go | metadecoder_xmp_test.go | Implemented |
+| REQ-IPTC-01 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go | Implemented |
+| REQ-IPTC-02 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go | Implemented |
+| REQ-IPTC-03 | ARCH-DEC-04 | metadecoder_iptc.go | metadecoder_iptc_test.go | Implemented |
+| REQ-IPTC-04 | ARCH-DEC-04 | metadecoder_exif.go, metadecoder_iptc.go | metadecoder_iptc_test.go | Implemented |
+| REQ-QT-01 | ARCH-DEC-05 | metadecoder_quicktime.go | metadecoder_quicktime_test.go, videometa_golden_test.go | Validated |
+| REQ-QT-02 | ARCH-DEC-05 | metadecoder_quicktime.go | metadecoder_quicktime_test.go, videometa_golden_test.go | Validated |
+| REQ-QT-03 | ARCH-DEC-05 | metadecoder_quicktime.go | metadecoder_quicktime_test.go, videometa_golden_test.go | Validated |
 | REQ-QT-04 | ARCH-DEC-05, ARCH-BOX-04 | metadecoder_quicktime.go, videodecoder_mp4.go | videometa_golden_test.go | Validated |
 | REQ-QT-05 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
-| REQ-QT-06 | ARCH-DEC-05 | helpers.go | helpers_test.go | Validated |
+| REQ-QT-06 | ARCH-DEC-05 | helpers.go | helpers_test.go, videometa_test.go | Validated |
 | REQ-QT-07 | ARCH-DEC-07 | metadecoder_quicktime.go | videometa_golden_test.go | Validated |
 | REQ-QT-08 | ARCH-DEC-05 | metadecoder_quicktime.go | videometa_test.go | Validated |
 | REQ-CFG-01 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
 | REQ-CFG-02 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
 | REQ-CFG-03 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go, helpers_test.go | Validated |
 | REQ-CFG-04 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
-| REQ-NF-01 | ARCH-IO-01 | io.go | io_test.go | Validated |
-| REQ-NF-02 | ARCH-IO-04 | io.go | videometa_bench_test.go | Validated |
-| REQ-NF-03 | ARCH-TEST-06 | videometa_bench_test.go | videometa_bench_test.go | Validated |
-| REQ-NF-04 | ARCH-TEST-01 | gen/main.go | videometa_golden_test.go, videometa_oracle_test.go | Validated |
-| REQ-NF-05 | ARCH-TEST-05 | videometa_fuzz_test.go | videometa_fuzz_test.go | Validated |
+| REQ-NF-01 | ARCH-IO-01 | io.go | io_test.go | Implemented |
+| REQ-NF-02 | ARCH-IO-04 | io.go | videometa_latency_test.go, videometa_bench_test.go | Validated |
+| REQ-NF-03 | ARCH-TEST-06 | videometa_bench_test.go | videometa_bench_test.go | Static |
+| REQ-NF-04 | ARCH-TEST-01 | gen/main.go | videometa_golden_test.go, videometa_oracle_test.go | Validated (real-file goldens); Implemented (synthetic regressions) |
+| REQ-NF-05 | ARCH-TEST-05 | videometa_fuzz_test.go | videometa_fuzz_test.go | Implemented |
 | REQ-NF-06 | ARCH-ERR-01 | helpers.go | videometa_test.go, helpers_test.go | Validated |
 | REQ-NF-07 | — | go.mod | — | Static |
 | REQ-NF-08 | ARCH-DEP-01 | go.mod | — | Static |

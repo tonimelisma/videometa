@@ -33,7 +33,7 @@ func FuzzDecodeMP4(f *testing.F) {
 		r := bytes.NewReader(data)
 		_, err := Decode(Options{
 			R:       r,
-			Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
+			Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG,
 			HandleTag: func(ti TagInfo) error {
 				return nil
 			},
@@ -67,9 +67,9 @@ func FuzzDecodeAllMP4(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		r := bytes.NewReader(data)
-		_, _, err := DecodeAll(Options{
+		_, err := DecodeAll(Options{
 			R:       r,
-			Sources: EXIF | XMP | IPTC | QUICKTIME | CONFIG,
+			Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG,
 		})
 		// All errors from malformed input must be InvalidFormatError.
 		if err != nil && !IsInvalidFormat(err) {
@@ -177,7 +177,7 @@ func FuzzDecodeMetaItemInfoMP4(f *testing.F) {
 			bytes.NewReader(data),
 			readerOnly{bytes.NewReader(data)},
 		} {
-			_, _, err := DecodeAll(Options{
+			_, err := DecodeAll(Options{
 				R:       reader,
 				Sources: EXIF | XMP,
 			})

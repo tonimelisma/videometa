@@ -1,14 +1,18 @@
 // Package videometa reads metadata from video files.
 //
-// It extracts EXIF, XMP, IPTC, and QuickTime native metadata from
-// MP4/MOV containers (ISOBMFF format). All output matches exiftool -n -json.
+// It extracts EXIF, XMP, IPTC, QuickTime, and vendor-specific container
+// metadata from MP4/MOV containers (ISOBMFF format). All output matches
+// exiftool -n -json.
 package videometa
 
 import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -17,12 +21,12 @@ type Source uint32
 
 const (
 	EXIF      Source = 1 << iota // EXIF IFD data
-	XMP                          // XMP/RDF XML
 	IPTC                         // IPTC-IIM records
-	QUICKTIME                    // QuickTime native metadata (ilst, freeform atoms)
-	CONFIG                       // Codec/dimension info from container structure
-	XML                          // Structured XML metadata (Sony NRTM, etc.)
-	COMPOSITE                    // Derived/computed tags (matching exiftool Composite group)
+	XMP                          // XMP/RDF XML
+	QUICKTIME                    // Standard/container-native QuickTime metadata
+	VENDOR                       // Vendor-specific container metadata families
+	CONFIG                       // VideoConfig request flag; not emitted as tags
+	COMPOSITE                    // Derived/computed tags, only materialized by DecodeAll
 )
 
 // Has reports whether s contains the given source.
@@ -33,6 +37,39 @@ func (s Source) Remove(source Source) Source { return s &^ source }
 
 // IsZero reports whether no sources are set.
 func (s Source) IsZero() bool { return s == 0 }
+
+// String returns a stable, human-readable representation of the source set.
+func (s Source) String() string {
+	if s == 0 {
+		return "0"
+	}
+
+	names := []struct {
+		source Source
+		name   string
+	}{
+		{source: EXIF, name: "EXIF"},
+		{source: IPTC, name: "IPTC"},
+		{source: XMP, name: "XMP"},
+		{source: QUICKTIME, name: "QUICKTIME"},
+		{source: VENDOR, name: "VENDOR"},
+		{source: CONFIG, name: "CONFIG"},
+		{source: COMPOSITE, name: "COMPOSITE"},
+	}
+
+	remaining := s
+	parts := make([]string, 0, len(names))
+	for _, item := range names {
+		if remaining.Has(item.source) {
+			parts = append(parts, item.name)
+			remaining = remaining.Remove(item.source)
+		}
+	}
+	if remaining != 0 {
+		parts = append(parts, fmt.Sprintf("Source(0x%x)", uint32(remaining)))
+	}
+	return strings.Join(parts, "|")
+}
 
 // VideoFormat identifies the container format.
 type VideoFormat int
@@ -50,7 +87,7 @@ type HandleTagFunc func(TagInfo) error
 type TagInfo struct {
 	Source    Source
 	Tag       string // Tag name matching exiftool output
-	Namespace string // Source-specific grouping (IFD name, XMP namespace URI, etc.)
+	Namespace string // Stable route identity: IFD path, namespace URI, or box path family
 	Value     any
 }
 
@@ -64,7 +101,7 @@ type Options struct {
 	VideoFormat VideoFormat
 
 	// Sources selects which metadata sources to extract.
-	// Zero value means all sources.
+	// Zero value means all primary sources plus CONFIG.
 	Sources Source
 
 	// HandleTag is called for each decoded tag. Required for Decode().
@@ -105,11 +142,25 @@ type DecodeResult struct {
 	VideoConfig VideoConfig
 }
 
+// Metadata is returned by DecodeAll.
+type Metadata struct {
+	Tags        Tags
+	VideoConfig VideoConfig
+}
+
 // ErrStopWalking can be returned from HandleTag to stop decoding early.
 var ErrStopWalking = errors.New("stop walking")
 
 // Decode reads metadata from a video file, calling opts.HandleTag for each tag.
 func Decode(opts Options) (result DecodeResult, err error) {
+	var wantsConfig bool
+
+	defer func() {
+		if !wantsConfig {
+			result.VideoConfig = VideoConfig{}
+		}
+	}()
+
 	if opts.R == nil {
 		return result, fmt.Errorf("videometa: Options.R is required")
 	}
@@ -117,7 +168,12 @@ func Decode(opts Options) (result DecodeResult, err error) {
 		return result, fmt.Errorf("videometa: Options.HandleTag is required")
 	}
 	if opts.Sources.IsZero() {
-		opts.Sources = EXIF | XMP | IPTC | QUICKTIME | CONFIG | XML
+		opts.Sources = EXIF | IPTC | XMP | QUICKTIME | VENDOR | CONFIG
+	}
+	wantsConfig = opts.Sources.Has(CONFIG)
+	opts.Sources = opts.Sources.Remove(COMPOSITE)
+	if opts.Sources.IsZero() {
+		return result, nil
 	}
 	if opts.LimitNumTags == 0 {
 		opts.LimitNumTags = 5000
@@ -199,98 +255,187 @@ func Decode(opts Options) (result DecodeResult, err error) {
 	return result, nil
 }
 
+type sourceLookupKey struct {
+	namespace string
+	tag       string
+}
+
+type sourceTagCollection struct {
+	ordered         []TagInfo
+	namespaceOrder  []string
+	namespaceLookup map[string]map[string]TagInfo
+	byTag           map[string][]TagInfo
+	lookup          map[sourceLookupKey]TagInfo
+}
+
+func newSourceTagCollection() *sourceTagCollection {
+	return &sourceTagCollection{
+		namespaceLookup: make(map[string]map[string]TagInfo),
+		byTag:           make(map[string][]TagInfo),
+		lookup:          make(map[sourceLookupKey]TagInfo),
+	}
+}
+
+func (c *sourceTagCollection) add(tag TagInfo) {
+	c.ordered = append(c.ordered, tag)
+	if _, found := c.namespaceLookup[tag.Namespace]; !found {
+		c.namespaceLookup[tag.Namespace] = make(map[string]TagInfo)
+		c.namespaceOrder = append(c.namespaceOrder, tag.Namespace)
+	}
+	c.namespaceLookup[tag.Namespace][tag.Tag] = tag
+	c.byTag[tag.Tag] = append(c.byTag[tag.Tag], tag)
+	c.lookup[sourceLookupKey{namespace: tag.Namespace, tag: tag.Tag}] = tag
+}
+
 // Tags collects decoded metadata for convenient access via DecodeAll.
 type Tags struct {
-	exif      map[string]TagInfo
-	xmp       map[string]TagInfo
-	iptc      map[string]TagInfo
-	quicktime map[string]TagInfo
-	config    map[string]TagInfo
-	xml       map[string]TagInfo
-	composite map[string]TagInfo
+	ordered []TagInfo
+	sources map[Source]*sourceTagCollection
 }
 
-// Add stores a tag in the appropriate source map.
+// SourceTags exposes lossless, namespace-aware access to tags from one source.
+type SourceTags struct {
+	collection *sourceTagCollection
+}
+
+// Add stores a tag while preserving source, namespace, tag, and decode order.
 func (t *Tags) Add(tag TagInfo) {
-	var m *map[string]TagInfo
-	switch tag.Source {
-	case EXIF:
-		m = &t.exif
-	case XMP:
-		m = &t.xmp
-	case IPTC:
-		m = &t.iptc
-	case QUICKTIME:
-		m = &t.quicktime
-	case CONFIG:
-		m = &t.config
-	case XML:
-		m = &t.xml
-	case COMPOSITE:
-		m = &t.composite
-	default:
+	if tag.Source == CONFIG {
 		return
 	}
-	if *m == nil {
-		*m = make(map[string]TagInfo)
+	if t.sources == nil {
+		t.sources = make(map[Source]*sourceTagCollection)
 	}
-	(*m)[tag.Tag] = tag
+	collection := t.sources[tag.Source]
+	if collection == nil {
+		collection = newSourceTagCollection()
+		t.sources[tag.Source] = collection
+	}
+	t.ordered = append(t.ordered, tag)
+	collection.add(tag)
 }
 
-// All returns all tags merged into a single map. On key collision,
-// priority is EXIF > XMP > QUICKTIME > XML > IPTC > CONFIG.
-func (t Tags) All() map[string]TagInfo {
-	result := make(map[string]TagInfo)
-	// Lowest priority first, highest last (overwrites).
-	for _, m := range []map[string]TagInfo{t.composite, t.config, t.iptc, t.xml, t.quicktime, t.xmp, t.exif} {
-		for k, v := range m {
-			result[k] = v
-		}
+func (t Tags) source(source Source) SourceTags {
+	if t.sources == nil {
+		return SourceTags{}
 	}
-	return result
+	return SourceTags{collection: t.sources[source]}
+}
+
+// All returns all tags in decode order, including duplicates across namespaces.
+func (t Tags) All() []TagInfo {
+	return slices.Clone(t.ordered)
 }
 
 // EXIF returns all EXIF tags.
-func (t Tags) EXIF() map[string]TagInfo { return t.exif }
-
-// XMP returns all XMP tags.
-func (t Tags) XMP() map[string]TagInfo { return t.xmp }
+func (t Tags) EXIF() SourceTags { return t.source(EXIF) }
 
 // IPTC returns all IPTC tags.
-func (t Tags) IPTC() map[string]TagInfo { return t.iptc }
+func (t Tags) IPTC() SourceTags { return t.source(IPTC) }
 
-// QuickTime returns all QuickTime native tags.
-func (t Tags) QuickTime() map[string]TagInfo { return t.quicktime }
+// XMP returns all XMP tags.
+func (t Tags) XMP() SourceTags { return t.source(XMP) }
 
-// Config returns all CONFIG tags.
-func (t Tags) Config() map[string]TagInfo { return t.config }
+// QuickTime returns all standard QuickTime tags.
+func (t Tags) QuickTime() SourceTags { return t.source(QUICKTIME) }
 
-// XML returns all structured XML metadata tags (e.g., Sony NRTM).
-func (t Tags) XML() map[string]TagInfo { return t.xml }
+// Vendor returns all vendor-specific container tags.
+func (t Tags) Vendor() SourceTags { return t.source(VENDOR) }
 
-// Composite returns all derived/computed tags.
-func (t Tags) Composite() map[string]TagInfo { return t.composite }
+// Composite returns all derived tags.
+func (t Tags) Composite() SourceTags { return t.source(COMPOSITE) }
+
+// All returns all tags for this source in decode order.
+func (s SourceTags) All() []TagInfo {
+	if s.collection == nil {
+		return nil
+	}
+	return slices.Clone(s.collection.ordered)
+}
+
+// Namespaces returns namespaces for this source in first-seen order.
+func (s SourceTags) Namespaces() []string {
+	if s.collection == nil {
+		return nil
+	}
+	return slices.Clone(s.collection.namespaceOrder)
+}
+
+// Namespace returns the tags in one namespace keyed by tag name.
+func (s SourceTags) Namespace(name string) map[string]TagInfo {
+	if s.collection == nil {
+		return nil
+	}
+	namespaceTags, found := s.collection.namespaceLookup[name]
+	if !found {
+		return nil
+	}
+	return maps.Clone(namespaceTags)
+}
+
+// Lookup finds a tag by exact namespace and tag name.
+func (s SourceTags) Lookup(namespace, tag string) (TagInfo, bool) {
+	if s.collection == nil {
+		return TagInfo{}, false
+	}
+	ti, found := s.collection.lookup[sourceLookupKey{namespace: namespace, tag: tag}]
+	return ti, found
+}
+
+// Find finds all tags with the given tag name across namespaces in decode order.
+func (s SourceTags) Find(tag string) []TagInfo {
+	if s.collection == nil {
+		return nil
+	}
+	return slices.Clone(s.collection.byTag[tag])
+}
+
+func firstTagInfo(sourceTags SourceTags, keys ...string) (TagInfo, bool) {
+	for _, key := range keys {
+		if matches := sourceTags.Find(key); len(matches) > 0 {
+			return matches[0], true
+		}
+	}
+	return TagInfo{}, false
+}
+
+func firstTagValue(sourceTags SourceTags, keys ...string) (any, bool) {
+	if tag, found := firstTagInfo(sourceTags, keys...); found {
+		return tag.Value, true
+	}
+	return nil, false
+}
+
+func firstNumericValue(sources []SourceTags, keys ...string) (float64, bool) {
+	for _, sourceTags := range sources {
+		if tag, found := firstTagInfo(sourceTags, keys...); found {
+			if value, ok := toFloat64(tag.Value); ok {
+				return value, true
+			}
+		}
+	}
+	return 0, false
+}
 
 // GetDateTime returns the best available creation time with original timezone.
-// Priority: EXIF DateTimeOriginal > XMP CreateDate > QuickTime CreationDate > QuickTime CreateDate.
+// Priority: EXIF DateTimeOriginal/CreateDate/ModifyDate > XMP DateTimeOriginal/
+// CreateDate/ModifyDate > QuickTime CreationDate/CreateDate/ModifyDate >
+// IPTC DateCreated.
 func (t Tags) GetDateTime() (time.Time, error) {
-	// Try sources in priority order.
 	candidates := []struct {
-		tags map[string]TagInfo
-		keys []string
+		source SourceTags
+		keys   []string
 	}{
-		{t.exif, []string{"DateTimeOriginal", "CreateDate", "ModifyDate"}},
-		{t.xmp, []string{"DateTimeOriginal", "CreateDate", "ModifyDate"}},
-		{t.quicktime, []string{"CreationDate", "CreateDate", "ModifyDate"}},
-		{t.iptc, []string{"DateCreated"}},
+		{source: t.EXIF(), keys: []string{"DateTimeOriginal", "CreateDate", "ModifyDate"}},
+		{source: t.XMP(), keys: []string{"DateTimeOriginal", "CreateDate", "ModifyDate"}},
+		{source: t.QuickTime(), keys: []string{"CreationDate", "CreateDate", "ModifyDate"}},
+		{source: t.IPTC(), keys: []string{"DateCreated"}},
 	}
 
-	for _, c := range candidates {
-		for _, key := range c.keys {
-			if tag, ok := c.tags[key]; ok {
-				if dt, err := parseAnyDateTime(tag.Value); err == nil {
-					return dt, nil
-				}
+	for _, candidate := range candidates {
+		if tag, found := firstTagInfo(candidate.source, candidate.keys...); found {
+			if dt, err := parseAnyDateTime(tag.Value); err == nil {
+				return dt, nil
 			}
 		}
 	}
@@ -311,8 +456,8 @@ func (t Tags) GetDateTimeUTC() (time.Time, error) {
 // Priority: EXIF GPS > XMP GPS > QuickTime GPS.
 func (t Tags) GetLatLong() (lat, lon float64, err error) {
 	// Try EXIF GPS.
-	if latTag, ok := t.exif["GPSLatitude"]; ok {
-		if lonTag, ok := t.exif["GPSLongitude"]; ok {
+	if latTag, found := firstTagInfo(t.EXIF(), "GPSLatitude"); found {
+		if lonTag, found := firstTagInfo(t.EXIF(), "GPSLongitude"); found {
 			if latVal, ok := toFloat64(latTag.Value); ok {
 				if lonVal, ok := toFloat64(lonTag.Value); ok {
 					return latVal, lonVal, nil
@@ -322,8 +467,8 @@ func (t Tags) GetLatLong() (lat, lon float64, err error) {
 	}
 
 	// Try XMP GPS.
-	if latTag, ok := t.xmp["GPSLatitude"]; ok {
-		if lonTag, ok := t.xmp["GPSLongitude"]; ok {
+	if latTag, found := firstTagInfo(t.XMP(), "GPSLatitude"); found {
+		if lonTag, found := firstTagInfo(t.XMP(), "GPSLongitude"); found {
 			if latVal, ok := toFloat64(latTag.Value); ok {
 				if lonVal, ok := toFloat64(lonTag.Value); ok {
 					return latVal, lonVal, nil
@@ -333,7 +478,7 @@ func (t Tags) GetLatLong() (lat, lon float64, err error) {
 	}
 
 	// Try QuickTime GPS (space-separated decimal or ISO6709).
-	if gpsTag, ok := t.quicktime["GPSCoordinates"]; ok {
+	if gpsTag, found := firstTagInfo(t.QuickTime(), "GPSCoordinates"); found {
 		if s, ok := gpsTag.Value.(string); ok {
 			if lat, lon, err := parseGPSCoordinatesString(s); err == nil {
 				return lat, lon, nil
@@ -344,17 +489,29 @@ func (t Tags) GetLatLong() (lat, lon float64, err error) {
 	return 0, 0, fmt.Errorf("videometa: no GPS coordinates found")
 }
 
-// DecodeAll decodes all metadata into a Tags struct and returns the DecodeResult
-// containing VideoConfig (width, height, duration, codec, rotation).
-func DecodeAll(opts Options) (Tags, DecodeResult, error) {
-	var tags Tags
+// DecodeAll collects emitted tags and returns them together with VideoConfig.
+func DecodeAll(opts Options) (Metadata, error) {
+	var metadata Metadata
+	requestedSources := opts.Sources
+	if requestedSources.IsZero() {
+		requestedSources = EXIF | IPTC | XMP | QUICKTIME | VENDOR | CONFIG | COMPOSITE
+	}
+
+	decodeSources := requestedSources.Remove(COMPOSITE)
+	if requestedSources.Has(COMPOSITE) {
+		decodeSources |= EXIF | IPTC | XMP | QUICKTIME | VENDOR | CONFIG
+	}
+	opts.Sources = decodeSources
 	opts.HandleTag = func(ti TagInfo) error {
-		tags.Add(ti)
+		metadata.Tags.Add(ti)
 		return nil
 	}
 	result, err := Decode(opts)
-	computeComposite(&tags, result)
-	return tags, result, err
+	metadata.VideoConfig = result.VideoConfig
+	if requestedSources.Has(COMPOSITE) {
+		computeComposite(&metadata.Tags, metadata.VideoConfig)
+	}
+	return metadata, err
 }
 
 // decoder is the internal interface for format-specific decoders.
@@ -373,6 +530,9 @@ type baseDecoder struct {
 // emitTag is the centralized tag emission method. All source-specific emit
 // methods must delegate to this. It enforces LimitNumTags and LimitTagSize.
 func (bd *baseDecoder) emitTag(ti TagInfo) {
+	if ti.Source == COMPOSITE || ti.Source == CONFIG {
+		return
+	}
 	if bd.opts.HandleTag == nil {
 		return
 	}
@@ -411,27 +571,26 @@ func newVideoDecoderMP4(bd *baseDecoder) decoder {
 	return &videoDecoderMP4{baseDecoder: bd}
 }
 
-// computeComposite derives Composite tags from already-decoded data,
-// matching exiftool's Composite group output.
-func computeComposite(tags *Tags, result DecodeResult) {
+// computeComposite derives Composite tags from already-decoded data, matching
+// exiftool's Composite group output.
+func computeComposite(tags *Tags, config VideoConfig) {
 	add := func(name string, value any) {
 		tags.Add(TagInfo{Source: COMPOSITE, Tag: name, Namespace: "Composite", Value: value})
 	}
 
-	w := result.VideoConfig.Width
-	h := result.VideoConfig.Height
+	w := config.Width
+	h := config.Height
 
 	if w > 0 && h > 0 {
 		add("ImageSize", fmt.Sprintf("%d %d", w, h))
 		add("Megapixels", float64(w*h)/1000000.0)
 	}
 
-	add("Rotation", result.VideoConfig.Rotation)
+	add("Rotation", config.Rotation)
 
 	// AvgBitrate: MediaDataSize * 8 / Duration.
-	qt := tags.QuickTime()
-	if mdSize, ok := qt["MediaDataSize"]; ok {
-		if dur, ok := qt["Duration"]; ok {
+	if mdSize, found := firstTagInfo(tags.QuickTime(), "MediaDataSize"); found {
+		if dur, found := firstTagInfo(tags.QuickTime(), "Duration"); found {
 			if sizeF, ok := toFloat64(mdSize.Value); ok {
 				if durF, ok := toFloat64(dur.Value); ok && durF > 0 {
 					add("AvgBitrate", int(math.Round(sizeF*8/durF)))
@@ -441,7 +600,7 @@ func computeComposite(tags *Tags, result DecodeResult) {
 	}
 
 	// GPS decomposition from QuickTime GPSCoordinates (space-separated decimal).
-	if gpsTag, ok := qt["GPSCoordinates"]; ok {
+	if gpsTag, found := firstTagInfo(tags.QuickTime(), "GPSCoordinates"); found {
 		if s, ok := gpsTag.Value.(string); ok {
 			lat, lon, err := parseGPSCoordinatesString(s)
 			if err == nil {
@@ -449,8 +608,8 @@ func computeComposite(tags *Tags, result DecodeResult) {
 				add("GPSLongitude", lon)
 				add("GPSPosition", fmt.Sprintf("%g %g", lat, lon))
 			}
-			alt, altOk := parseGPSAltitudeFromString(s)
-			if altOk {
+			alt, altOK := parseGPSAltitudeFromString(s)
+			if altOK {
 				ref := 0
 				if alt < 0 {
 					ref = 1
@@ -462,42 +621,42 @@ func computeComposite(tags *Tags, result DecodeResult) {
 		}
 	}
 
-	// Photography composites from vendor-specific QuickTime metadata.
-	if fn, ok := qt["FNumber"]; ok {
-		if v, ok := toFloat64(fn.Value); ok {
-			add("Aperture", v)
-		}
+	// Photography composites from vendor-specific or QuickTime metadata.
+	if value, found := firstNumericValue([]SourceTags{tags.Vendor(), tags.QuickTime()}, "FNumber"); found {
+		add("Aperture", value)
 	}
 
-	if et, ok := qt["ExposureTime"]; ok {
-		if v, ok := toFloat64(et.Value); ok {
-			add("ShutterSpeed", v)
-		}
+	if value, found := firstNumericValue([]SourceTags{tags.Vendor(), tags.QuickTime()}, "ExposureTime"); found {
+		add("ShutterSpeed", value)
 	}
 
-	if fl, ok := qt["FocalLength"]; ok {
-		if v, ok := toFloat64(fl.Value); ok {
-			add("FocalLength35efl", v)
-		}
+	if value, found := firstNumericValue([]SourceTags{tags.Vendor(), tags.QuickTime()}, "FocalLength"); found {
+		add("FocalLength35efl", value)
 	}
 
 	// LightValue: log2(Aperture^2 / ShutterSpeed) - log2(ISO/100).
-	if apTag, ok := qt["FNumber"]; ok {
-		if etTag, ok := qt["ExposureTime"]; ok {
-			if isoTag, ok := qt["ISO"]; ok {
-				ap, _ := toFloat64(apTag.Value)
-				et, _ := toFloat64(etTag.Value)
-				iso, _ := toFloat64(isoTag.Value)
-				if ap > 0 && et > 0 && iso > 0 {
-					lv := math.Log2(ap*ap/et) - math.Log2(iso/100)
-					add("LightValue", lv)
-				}
-			}
-		}
+	ap, apOK := firstNumericValue([]SourceTags{tags.Vendor(), tags.QuickTime()}, "FNumber")
+	et, etOK := firstNumericValue([]SourceTags{tags.Vendor(), tags.QuickTime()}, "ExposureTime")
+	iso, isoOK := firstNumericValue([]SourceTags{tags.Vendor(), tags.QuickTime()}, "ISO")
+	if apOK && etOK && isoOK && ap > 0 && et > 0 && iso > 0 {
+		lv := math.Log2(ap*ap/et) - math.Log2(iso/100)
+		add("LightValue", lv)
 	}
 
-	// LensID from QuickTime freeform LensModel.
-	if lm, ok := qt["LensModel"]; ok {
-		add("LensID", lm.Value)
+	// LensID from vendor or QuickTime lens metadata.
+	if lensID, found := firstTagValue(tags.Vendor(), "LensModel"); found {
+		add("LensID", lensID)
+		return
+	}
+	if lensID, found := firstTagValue(tags.QuickTime(), "LensModel"); found {
+		add("LensID", lensID)
+		return
+	}
+	if lensID, found := firstTagValue(tags.Vendor(), "LensID"); found {
+		add("LensID", lensID)
+		return
+	}
+	if lensID, found := firstTagValue(tags.QuickTime(), "LensID"); found {
+		add("LensID", lensID)
 	}
 }
