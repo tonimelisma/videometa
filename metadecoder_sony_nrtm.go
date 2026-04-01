@@ -11,7 +11,8 @@ import (
 // decodeSonyNRTM parses Sony NonRealTimeMeta XML and emits tags matching
 // exiftool's XML group output. The tag naming convention flattens the XML
 // hierarchy: parent element names are concatenated with attribute/child names
-// in CamelCase. Only the first occurrence of repeating elements is emitted.
+// in CamelCase. Repeating XML elements are emitted in source order; the public
+// collection API preserves duplicates, so dropping repeats would lose data.
 func (d *videoDecoderMP4) decodeSonyNRTM(r io.Reader, namespace string) {
 	dec := xml.NewDecoder(r)
 
@@ -42,15 +43,14 @@ func (d *videoDecoderMP4) decodeSonyNRTM(r io.Reader, namespace string) {
 		emit("DurationValue", nrtmParseNumeric(root.Duration.Value))
 	}
 
-	// LtcChangeTable — emit table attributes + first LtcChange entry.
+	// LtcChangeTable — emit table attributes + all LtcChange entries.
 	if root.LtcChangeTable.TcFps != "" {
 		emit("LtcChangeTableTcFps", nrtmParseNumeric(root.LtcChangeTable.TcFps))
 	}
 	if root.LtcChangeTable.HalfStep != "" {
 		emit("LtcChangeTableHalfStep", nrtmParseBool(root.LtcChangeTable.HalfStep))
 	}
-	if len(root.LtcChangeTable.LtcChanges) > 0 {
-		lc := root.LtcChangeTable.LtcChanges[0]
+	for _, lc := range root.LtcChangeTable.LtcChanges {
 		emit("LtcChangeTableLtcChangeFrameCount", nrtmParseNumeric(lc.FrameCount))
 		emit("LtcChangeTableLtcChangeValue", nrtmParseNumeric(lc.Value))
 		if lc.Status != "" {
@@ -62,9 +62,8 @@ func (d *videoDecoderMP4) decodeSonyNRTM(r io.Reader, namespace string) {
 		emit("CreationDateValue", root.CreationDate.Value)
 	}
 
-	// KlvPacketTable — first entry.
-	if len(root.KlvPacketTable.KlvPackets) > 0 {
-		kp := root.KlvPacketTable.KlvPackets[0]
+	// KlvPacketTable — all entries.
+	for _, kp := range root.KlvPacketTable.KlvPackets {
 		if kp.Key != "" {
 			emit("KlvPacketTableKlvPacketKey", kp.Key)
 		}
@@ -106,8 +105,7 @@ func (d *videoDecoderMP4) decodeSonyNRTM(r io.Reader, namespace string) {
 	if root.AudioFormat.NumOfChannel != "" {
 		emit("AudioFormatNumOfChannel", nrtmParseNumeric(root.AudioFormat.NumOfChannel))
 	}
-	if len(root.AudioFormat.AudioRecPorts) > 0 {
-		arp := root.AudioFormat.AudioRecPorts[0]
+	for _, arp := range root.AudioFormat.AudioRecPorts {
 		if arp.Port != "" {
 			emit("AudioFormatAudioRecPortPort", arp.Port)
 		}
@@ -138,14 +136,12 @@ func (d *videoDecoderMP4) decodeSonyNRTM(r io.Reader, namespace string) {
 		emit("RecordingModeCacheRec", nrtmParseBool(root.RecordingMode.CacheRec))
 	}
 
-	// AcquisitionRecord — first Group + first ChangeTable.
-	if len(root.AcquisitionRecord.Groups) > 0 {
-		g := root.AcquisitionRecord.Groups[0]
+	// AcquisitionRecord — all Group and ChangeTable entries in source order.
+	for _, g := range root.AcquisitionRecord.Groups {
 		if g.Name != "" {
 			emit("AcquisitionRecordGroupName", g.Name)
 		}
-		if len(g.Items) > 0 {
-			item := g.Items[0]
+		for _, item := range g.Items {
 			if item.Name != "" {
 				emit("AcquisitionRecordGroupItemName", item.Name)
 			}
@@ -154,13 +150,11 @@ func (d *videoDecoderMP4) decodeSonyNRTM(r io.Reader, namespace string) {
 			}
 		}
 	}
-	if len(root.AcquisitionRecord.ChangeTables) > 0 {
-		ct := root.AcquisitionRecord.ChangeTables[0]
+	for _, ct := range root.AcquisitionRecord.ChangeTables {
 		if ct.Name != "" {
 			emit("AcquisitionRecordChangeTableName", ct.Name)
 		}
-		if len(ct.Events) > 0 {
-			ev := ct.Events[0]
+		for _, ev := range ct.Events {
 			emit("AcquisitionRecordChangeTableEventFrameCount", nrtmParseNumeric(ev.FrameCount))
 			if ev.Status != "" {
 				emit("AcquisitionRecordChangeTableEventStatus", ev.Status)

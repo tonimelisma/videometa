@@ -93,6 +93,11 @@ func (d *videoDecoderMP4) decodeIlstAtomData(atomStart int64, atomSize uint64, t
 			case tagName == "BeatsPerMinute" && typeIndicator == qtDataTypeSInt8 && valueLen >= 2:
 				// tmpo stores BPM as big-endian uint16, but type indicator may incorrectly say int8.
 				value = int(binary.BigEndian.Uint16(d.readBytes(valueLen)[:2]))
+			case tagName == "AndroidCaptureFPS" && typeIndicator == qtDataTypeSInt16BE && valueLen == 4:
+				// Android mdta capture FPS is stored as a float32 despite the atypical
+				// data flag value 0x17 that exiftool reports for this key.
+				bits := d.read4()
+				value = float64(math.Float32frombits(bits))
 			default:
 				value = d.decodeQTValue(typeIndicator, valueLen)
 			}
@@ -359,6 +364,14 @@ var freeformTagNames = map[string]string{
 	"full-frame-rate-playback-intent":       "FullFrameRatePlaybackIntent",
 	"apple-maker-note.74":                   "Apple-maker-note74",
 	"apple-maker-note.97":                   "Apple-maker-note97",
+}
+
+// mdtaTagNames maps known non-Apple mdta keys to the exiftool tag names that
+// appear in the QuickTime group.
+var mdtaTagNames = map[string]string{
+	"com.android.capture.fps":  "AndroidCaptureFPS",
+	"com.android.manufacturer": "AndroidMake",
+	"com.android.model":        "AndroidModel",
 }
 
 // ilstAtomToTagName maps standard ilst atom types to exiftool tag names.

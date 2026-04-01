@@ -7,6 +7,16 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
+func sonyNRTMTagValues(tags []TagInfo, name string) []any {
+	values := make([]any, 0, len(tags))
+	for _, tag := range tags {
+		if tag.Tag == name {
+			values = append(values, tag.Value)
+		}
+	}
+	return values
+}
+
 // Validates: REQ-NF-04
 func TestNrtmParseNumeric(t *testing.T) {
 	c := qt.New(t)
@@ -69,9 +79,12 @@ func TestDecodeSonyNRTM(t *testing.T) {
 	<AcquisitionRecord>
 		<Group name="TestGroup">
 			<Item name="Key1" value="Val1"/>
+			<Item name="Latitude" value="29;19;10.922"/>
+			<Item name="Longitude" value="103;36;36.925"/>
 		</Group>
 		<ChangeTable name="TestTable">
 			<Event frameCount="0" status="start"/>
+			<Event frameCount="10" status="stop"/>
 		</ChangeTable>
 	</AcquisitionRecord>
 </NonRealTimeMeta>`
@@ -120,9 +133,23 @@ func TestDecodeSonyNRTM(t *testing.T) {
 	c.Assert(tagMap["RecordingModeType"], qt.Equals, "normal")
 	c.Assert(tagMap["RecordingModeCacheRec"], qt.Equals, true)
 	c.Assert(tagMap["AcquisitionRecordGroupName"], qt.Equals, "TestGroup")
-	c.Assert(tagMap["AcquisitionRecordGroupItemName"], qt.Equals, "Key1")
-	c.Assert(tagMap["AcquisitionRecordGroupItemValue"], qt.Equals, "Val1")
 	c.Assert(tagMap["AcquisitionRecordChangeTableName"], qt.Equals, "TestTable")
-	c.Assert(tagMap["AcquisitionRecordChangeTableEventFrameCount"], qt.Equals, 0)
-	c.Assert(tagMap["AcquisitionRecordChangeTableEventStatus"], qt.Equals, "start")
+	c.Assert(sonyNRTMTagValues(tags, "AcquisitionRecordGroupItemName"), qt.DeepEquals, []any{
+		"Key1",
+		"Latitude",
+		"Longitude",
+	})
+	c.Assert(sonyNRTMTagValues(tags, "AcquisitionRecordGroupItemValue"), qt.DeepEquals, []any{
+		"Val1",
+		"29;19;10.922",
+		"103;36;36.925",
+	})
+	c.Assert(sonyNRTMTagValues(tags, "AcquisitionRecordChangeTableEventFrameCount"), qt.DeepEquals, []any{
+		0,
+		10,
+	})
+	c.Assert(sonyNRTMTagValues(tags, "AcquisitionRecordChangeTableEventStatus"), qt.DeepEquals, []any{
+		"start",
+		"stop",
+	})
 }

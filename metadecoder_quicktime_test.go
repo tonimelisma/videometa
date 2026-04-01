@@ -66,3 +66,15 @@ func TestFreeformToTagName(t *testing.T) {
 	// Wrong vendor.
 	c.Assert(freeformToTagName("com.google.android", "make"), qt.Equals, "")
 }
+
+// Validates: REQ-QT-03
+func TestMDTAKeyToTagName(t *testing.T) {
+	c := qt.New(t)
+
+	c.Assert(mdtaKeyToTagName("com.apple.quicktime.location.ISO6709"), qt.Equals, "GPSCoordinates")
+	c.Assert(mdtaKeyToTagName("com.android.manufacturer"), qt.Equals, "AndroidMake")
+	c.Assert(mdtaKeyToTagName("com.android.model"), qt.Equals, "AndroidModel")
+	c.Assert(mdtaKeyToTagName("com.android.capture.fps"), qt.Equals, "AndroidCaptureFPS")
+	c.Assert(mdtaKeyToTagName("SpecialTypeID"), qt.Equals, "SpecialTypeID")
+	c.Assert(mdtaKeyToTagName("com.apple.quicktime.unknown.key"), qt.Equals, "")
+}
