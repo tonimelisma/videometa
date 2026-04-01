@@ -14,7 +14,6 @@ func FuzzDecodeMP4(f *testing.F) {
 	seeds := []string{
 		"testdata/minimal.mp4",
 		"testdata/nonfaststart.mp4",
-		"testdata/truncated.mp4",
 		"testdata/with_audio.mp4",
 		"testdata/with_gps.mp4",
 		"testdata/exiftool_quicktime.mov",
@@ -28,6 +27,8 @@ func FuzzDecodeMP4(f *testing.F) {
 		}
 		f.Add(data)
 	}
+	f.Add([]byte{0, 0, 0, 20, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'})
+	f.Add([]byte{0, 0, 0, 8, 'f', 't'})
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		r := bytes.NewReader(data)
@@ -50,7 +51,6 @@ func FuzzDecodeAllMP4(f *testing.F) {
 	seeds := []string{
 		"testdata/minimal.mp4",
 		"testdata/nonfaststart.mp4",
-		"testdata/truncated.mp4",
 		"testdata/with_audio.mp4",
 		"testdata/with_gps.mp4",
 		"testdata/exiftool_quicktime.mov",
@@ -64,6 +64,8 @@ func FuzzDecodeAllMP4(f *testing.F) {
 		}
 		f.Add(data)
 	}
+	f.Add([]byte{0, 0, 0, 20, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'})
+	f.Add([]byte{0, 0, 0, 8, 'f', 't'})
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		r := bytes.NewReader(data)

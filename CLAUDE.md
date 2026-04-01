@@ -55,7 +55,7 @@ Planned work: see `docs/TASKS.md`.
 
 ### exiftool Is the Source of Truth
 
-Every tag name, every value conversion must match `exiftool -n -json` output. When in doubt, exiftool wins. Study the Perl source (`QuickTime.pm`, `Exif.pm`, `XMP.pm`) for edge cases and value conversion logic.
+Every tag name, every value conversion must match exiftool output. Grouped `exiftool -n -json` remains the broad parity baseline, and ordered duplicate-preserving exiftool goldens backstop the repeated-tag cases. When in doubt, exiftool wins. Study the Perl source (`QuickTime.pm`, `Exif.pm`, `XMP.pm`) for edge cases and value conversion logic.
 
 ### Tag Name Exactness
 
@@ -75,7 +75,7 @@ Never buffer an entire file or even an entire box into memory. `mdat` can be gig
 
 ### Golden File Workflow
 
-`go generate ./gen` runs exiftool on test videos, produces JSON in `testdata/`. Tests compare videometa output against committed JSON. CI re-runs exiftool to catch drift. This is the primary correctness mechanism.
+`go generate ./gen` runs exiftool on test videos, produces grouped JSON plus ordered occurrence goldens in `testdata/`, and regenerates EXIF field tables. Tests compare videometa output against those committed artifacts. CI re-runs exiftool to catch drift. This is the primary correctness mechanism.
 
 ### Fuzz Testing Mandate
 
@@ -87,7 +87,7 @@ ISOBMFF is always big-endian. EXIF can be either endianness. Always use streamRe
 
 ### Test Corpus Management
 
-Small test videos (< 50 KB) are committed to git. Large real-world test videos are **gitignored but live on disk** — they are the user's data and must never be deleted, nor may their golden JSON or test functions be removed.
+Small test videos (< 50 KB) are committed to git. Large real-world test videos are **gitignored but live on disk** — they are the user's data and must never be deleted, nor may their golden files or test functions be removed.
 
 **Large gitignored test files (DO NOT DELETE):**
 
@@ -150,7 +150,7 @@ Implement from specs. Use exiftool's Perl logic as reference for edge cases and 
 ### Test Strategy
 
 - **Test the contract, not the implementation.** Tests should break when behavior changes, not when you refactor internals. Test through exported APIs.
-- **Golden files are the primary validation mechanism.** Compare videometa output against committed exiftool JSON. Update with `go generate ./gen`.
+- **Golden files are the primary validation mechanism.** Compare videometa output against committed grouped exiftool JSON and ordered occurrence goldens. Update with `go generate ./gen`.
 - **Fuzz every decoder path.** Seed corpus from real test videos. Must not panic, must not allocate > 10MB.
 - **Benchmarks are required.** Per-source, all-sources, per-file-type. Target: < 500μs for typical smartphone MP4.
 
@@ -175,7 +175,7 @@ Work is done in increments. Do not ask permission, do not skip any step.
        cp "/Users/tonimelisma/Development/videometa/$f" "<worktree>/$f"
    done
    ```
-   **Never delete gitignored test files or their golden JSON. They are the user's data.**
+   **Never delete gitignored test files or their golden files. They are the user's data.**
 4. All changes go through PRs.
 
 ### Step 3: Develop with TDD

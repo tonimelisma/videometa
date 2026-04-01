@@ -1,5 +1,5 @@
 [{
-  "SourceFile": "testdata/google.mp4",
+  "SourceFile": "../testdata/google.mp4",
   "QuickTime": {
     "MajorBrand": "isom",
     "MinorVersion": "2.0.0",

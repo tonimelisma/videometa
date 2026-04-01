@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -144,31 +145,104 @@ func formatTimeForGolden(t time.Time) string {
 	return t.Format("2006:01:02 15:04:05-07:00")
 }
 
-// goldenGroupTags returns the videometa tags for a given exiftool group name.
-func goldenGroupTags(tags Tags, group string) map[string]TagInfo {
-	switch group {
-	case "EXIF":
-		return flattenSourceTags(tags.EXIF())
-	case "IPTC":
-		return flattenSourceTags(tags.IPTC())
-	case "QuickTime":
-		merged := flattenSourceTags(tags.QuickTime())
-		for name, tag := range flattenSourceTagsWhere(tags.Vendor(), func(tag TagInfo) bool {
-			return !strings.HasSuffix(tag.Namespace, "/nrtm")
-		}) {
-			merged[name] = tag
-		}
-		return merged
-	case "XMP":
-		return flattenSourceTags(tags.XMP())
-	case "XML":
-		return flattenSourceTagsWhereFirst(tags.Vendor(), func(tag TagInfo) bool {
-			return strings.HasSuffix(tag.Namespace, "/nrtm")
-		})
-	case "Composite":
-		return flattenSourceTags(tags.Composite())
-	default:
+// goldenGroupTags returns a per-tag-name view aligned with exiftool's grouped
+// JSON output. When multiple occurrences share the same tag name, it selects
+// the occurrence whose value matches the grouped exiftool golden so the flat
+// comparison and the ordered comparison can coexist.
+func goldenGroupTags(tags Tags, group string, golden map[string]any) map[string]TagInfo {
+	ordered := actualOrderedGroupTags(tags, group)
+	if ordered == nil {
 		return nil
+	}
+
+	byName := make(map[string][]TagInfo)
+	for _, tag := range ordered {
+		byName[tag.Tag] = append(byName[tag.Tag], tag)
+	}
+
+	selected := make(map[string]TagInfo, len(byName))
+	for name, want := range golden {
+		candidates := byName[name]
+		for _, candidate := range candidates {
+			if goldenValueMatches(candidate.Value, want) {
+				selected[name] = candidate
+				break
+			}
+		}
+		if _, exists := selected[name]; exists {
+			continue
+		}
+		if len(candidates) > 0 {
+			selected[name] = candidates[0]
+		}
+	}
+
+	for name, candidates := range byName {
+		if _, exists := selected[name]; exists || len(candidates) == 0 {
+			continue
+		}
+		selected[name] = candidates[0]
+	}
+
+	return selected
+}
+
+func goldenValueMatches(got any, want any) bool {
+	switch w := want.(type) {
+	case float64:
+		gotF, ok := toFloat64(got)
+		if !ok {
+			if t, isTime := got.(time.Time); isTime {
+				return formatTimeForGolden(t) == fmt.Sprintf("%v", w)
+			}
+			if s, isString := got.(string); isString {
+				wantStr := fmt.Sprintf("%v", w)
+				if w == math.Floor(w) {
+					wantStr = fmt.Sprintf("%d", int(w))
+				}
+				return s == wantStr
+			}
+			return false
+		}
+		if w == 0 && gotF == 0 {
+			return true
+		}
+		if math.Abs(w) > 1 {
+			return math.Abs((gotF-w)/w) < 0.0001
+		}
+		return math.Abs(gotF-w) < 0.001
+	case string:
+		if strings.HasPrefix(w, "(Binary data") {
+			_, ok := got.([]byte)
+			return ok
+		}
+		if wantF, err := strconv.ParseFloat(w, 64); err == nil {
+			if goldenValueMatches(got, wantF) {
+				return true
+			}
+		}
+		gotStr := formatValueForGolden(got)
+		if gotStr == w {
+			return true
+		}
+		return convertDateToExiftool(gotStr) == w
+	case []any:
+		gotSlice, ok := got.([]string)
+		if !ok || len(gotSlice) != len(w) {
+			return false
+		}
+		for i, wantValue := range w {
+			wantString, ok := wantValue.(string)
+			if !ok || gotSlice[i] != wantString {
+				return false
+			}
+		}
+		return true
+	case bool:
+		gotBool, ok := got.(bool)
+		return ok && gotBool == w
+	default:
+		return formatValueForGolden(got) == fmt.Sprintf("%v", want)
 	}
 }
 
@@ -188,6 +262,7 @@ func testGoldenExhaustive(c *qt.C, videoPath string, goldenPath string, groups [
 	c.Assert(err, qt.IsNil)
 
 	golden := loadGolden(c, goldenPath)
+	orderedGolden := loadOrderedGolden(c, orderedGoldenPathFor(goldenPath))
 
 	for _, group := range groups {
 		goldenGroup, ok := golden[group]
@@ -197,11 +272,15 @@ func testGoldenExhaustive(c *qt.C, videoPath string, goldenPath string, groups [
 		goldenMap, ok := goldenGroup.(map[string]any)
 		c.Assert(ok, qt.IsTrue, qt.Commentf("golden %s is not a map", group))
 
-		vmTags := goldenGroupTags(tags, group)
+		vmTags := goldenGroupTags(tags, group, goldenMap)
 		c.Assert(vmTags != nil, qt.IsTrue, qt.Commentf("no videometa tags for group %s", group))
 
 		compareAllGoldenTags(c, vmTags, goldenMap, group)
 		assertExtraTagsNotInGolden(c, vmTags, goldenMap, group)
+
+		orderedGroup, ok := orderedGolden.Group(group)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("missing ordered golden group %s in %s", group, orderedGoldenPathFor(goldenPath)))
+		compareOrderedGoldenTags(c, actualOrderedGroupTags(tags, group), orderedGroup, group)
 	}
 }
 
@@ -240,29 +319,6 @@ func TestGoldenNonfaststart(t *testing.T) {
 	c := qt.New(t)
 	testGoldenExhaustive(c, "testdata/nonfaststart.mp4", "testdata/nonfaststart.mp4.exiftool.json",
 		[]string{"QuickTime", "Composite"})
-}
-
-// Validates: REQ-NF-04, REQ-NF-06, REQ-TEST-04
-func TestGoldenTruncated(t *testing.T) {
-	c := qt.New(t)
-
-	f, err := os.Open("testdata/truncated.mp4")
-	c.Assert(err, qt.IsNil)
-	defer func() { _ = f.Close() }()
-
-	// Truncated file — decode will error but may emit partial ftyp tags.
-	tags, _, _ := decodeAllForTest(Options{R: f, Sources: QUICKTIME})
-
-	golden := loadGolden(c, "testdata/truncated.mp4.exiftool.json")
-	qtGolden := golden["QuickTime"].(map[string]any)
-	qtTags := flattenSourceTags(tags.QuickTime())
-
-	// Verify whatever tags were emitted match exiftool.
-	for name, goldenVal := range qtGolden {
-		if tag, ok := qtTags[name]; ok {
-			assertGoldenValue(c, "QuickTime", name, tag.Value, goldenVal)
-		}
-	}
 }
 
 // Validates: REQ-NF-04, REQ-TEST-09

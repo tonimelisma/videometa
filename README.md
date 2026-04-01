@@ -3,7 +3,7 @@
 [![CI](https://github.com/tonimelisma/videometa/actions/workflows/ci.yml/badge.svg)](https://github.com/tonimelisma/videometa/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/tonimelisma/videometa.svg)](https://pkg.go.dev/github.com/tonimelisma/videometa)
 
-Pure Go library for reading metadata from video files. Extracts EXIF, XMP, IPTC, QuickTime native, and vendor-specific container metadata from MP4/MOV files. All output matches `exiftool -n -json` for the supported video metadata paths.
+Pure Go library for reading metadata from video files. Extracts EXIF, XMP, IPTC, QuickTime native, and vendor-specific container metadata from MP4/MOV files. Real-file parity is checked against both grouped `exiftool -n -json -g` goldens and duplicate-preserving ordered exiftool goldens for the supported video metadata paths.
 
 ## Features
 

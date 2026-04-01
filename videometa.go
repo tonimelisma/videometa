@@ -2,7 +2,7 @@
 //
 // It extracts EXIF, XMP, IPTC, QuickTime, and vendor-specific container
 // metadata from MP4/MOV containers (ISOBMFF format). All output matches
-// exiftool -n -json.
+// exiftool, with grouped and ordered golden tests enforcing parity.
 package videometa
 
 import (
@@ -619,12 +619,20 @@ func computeComposite(tags *Tags, config VideoConfig) {
 	w := config.Width
 	h := config.Height
 
+	// Photography composites follow exiftool's Composite ordering before the
+	// generic image-size and bitrate fields.
+	if value, found := firstNumericValue([]SourceTags{tags.Vendor(), tags.QuickTime()}, "FNumber"); found {
+		add("Aperture", value)
+	}
+
 	if w > 0 && h > 0 {
 		add("ImageSize", fmt.Sprintf("%d %d", w, h))
 		add("Megapixels", float64(w*h)/1000000.0)
 	}
 
-	add("Rotation", config.Rotation)
+	if value, found := firstNumericValue([]SourceTags{tags.Vendor(), tags.QuickTime()}, "ExposureTime"); found {
+		add("ShutterSpeed", value)
+	}
 
 	// AvgBitrate: MediaDataSize * 8 / Duration.
 	if mdSize, found := firstTagInfo(tags.QuickTime(), "MediaDataSize"); found {
@@ -641,11 +649,6 @@ func computeComposite(tags *Tags, config VideoConfig) {
 	if gpsTag, found := firstTagInfo(tags.QuickTime(), "GPSCoordinates"); found {
 		if s, ok := gpsTag.Value.(string); ok {
 			lat, lon, err := parseGPSCoordinatesString(s)
-			if err == nil {
-				add("GPSLatitude", lat)
-				add("GPSLongitude", lon)
-				add("GPSPosition", fmt.Sprintf("%g %g", lat, lon))
-			}
 			alt, altOK := parseGPSAltitudeFromString(s)
 			if altOK {
 				ref := 0
@@ -656,16 +659,19 @@ func computeComposite(tags *Tags, config VideoConfig) {
 				add("GPSAltitude", alt)
 				add("GPSAltitudeRef", ref)
 			}
+			if err == nil {
+				add("GPSLatitude", lat)
+				add("GPSLongitude", lon)
+			}
+			add("Rotation", config.Rotation)
+			if err == nil {
+				add("GPSPosition", fmt.Sprintf("%g %g", lat, lon))
+			}
+		} else {
+			add("Rotation", config.Rotation)
 		}
-	}
-
-	// Photography composites from vendor-specific or QuickTime metadata.
-	if value, found := firstNumericValue([]SourceTags{tags.Vendor(), tags.QuickTime()}, "FNumber"); found {
-		add("Aperture", value)
-	}
-
-	if value, found := firstNumericValue([]SourceTags{tags.Vendor(), tags.QuickTime()}, "ExposureTime"); found {
-		add("ShutterSpeed", value)
+	} else {
+		add("Rotation", config.Rotation)
 	}
 
 	if value, found := firstNumericValue([]SourceTags{tags.Vendor(), tags.QuickTime()}, "FocalLength"); found {
