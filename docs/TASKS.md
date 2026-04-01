@@ -71,7 +71,7 @@ All complete. See git history for details.
 |------|-------------|--------|-------|
 | TASK-M11-01 | Exhaustive golden tests for all 6 test files (100% tag coverage) | ✅ Complete | videometa_golden_test.go |
 | TASK-M11-02 | Composite tag emission (ImageSize, Megapixels, AvgBitrate, Rotation, GPS*, Aperture, ShutterSpeed, FocalLength35efl, LightValue, LensID) | ✅ Complete | videometa.go |
-| TASK-M11-03 | Fix nerfed tests (TestDecodeTruncatedMP4, TestWarnfCallback, TestDecodeTimeout) | ✅ Complete | videometa_test.go |
+| TASK-M11-03 | Fix malformed-input, Warnf callback, and timeout tests | ✅ Complete | videometa_test.go |
 | TASK-M11-04 | Add traceability comments (99 total // Validates: entries) | ✅ Complete | *_test.go |
 | TASK-M11-05 | Fix decoder bugs (GPSCoordinates format, tkhd multi-track, DiskNumber/TrackNumber, BeatsPerMinute, old-style text atoms, HandlerVendorID null, MOV language code) | ✅ Complete | videodecoder_mp4.go, metadecoder_quicktime.go, helpers.go |
 | TASK-M11-06 | New requirement tests (HandleTagFieldsPopulated, VideoConfig, Box64BitExtendedSize, BoxSkipUnknown, QuickTimeCreationDateTimezone, EXIFFieldTableSize) | ✅ Complete | videometa_test.go |
@@ -135,7 +135,7 @@ Consistency fixes for error typing in IO paths, fuzz target documentation, test 
 | TASK-M15-02 | Document why pos()/seek() use stop() not stopInvalidFormat() | ✅ Complete | io.go |
 | TASK-M15-03 | Clarify decoder fuzz targets re: internal recovery and no-error-escape semantics | ✅ Complete | videometa_fuzz_test.go |
 | TASK-M15-04 | Move TestSeedCorpusDecodesSuccessfully from bench to test file | ✅ Complete | videometa_bench_test.go, videometa_test.go |
-| TASK-M15-05 | Add TestKnownInvalidFilesMustError counterpart + document truncated.mp4 exclusion | ✅ Complete | videometa_test.go |
+| TASK-M15-05 | Replace `truncated.mp4` fixture coverage with inline malformed-input regressions | ✅ Complete | videometa_test.go, videometa_fuzz_test.go |
 
 ---
 
@@ -237,3 +237,16 @@ Record the remaining real-video fixture gaps and make the publicly downloadable 
 | TASK-M22-01 | Add a manifest-driven bootstrap script that downloads every verified official sample fixture into `testdata/` with header/size checks | ✅ Complete | scripts/bootstrap-fixtures.sh, scripts/fixture_bootstrap.tsv |
 | TASK-M22-02 | Document the remaining fixture gaps, split them into scriptable vs manual-only, and record source pages plus local target filenames | ✅ Complete | docs/FIXTURE_ACQUISITION.md |
 | TASK-M22-03 | Extend `.gitignore` for local-only fixture targets so downloaded media never appears as staged repo content by accident | ✅ Complete | .gitignore |
+
+---
+
+## Milestone 23: Golden Validation Hardening
+
+Remove the bogus truncated fixture from the validation corpus and strengthen real-file parity checks so duplicate tags and occurrence order are validated instead of flattened away.
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M23-01 | Remove `truncated.mp4` and its golden from the corpus; replace it with inline malformed-input regressions and fuzz seeds | ✅ Complete | videometa_test.go, videometa_fuzz_test.go, testdata/ |
+| TASK-M23-02 | Generate duplicate-preserving ordered exiftool goldens alongside grouped JSON goldens | ✅ Complete | gen/main.go, testdata/ |
+| TASK-M23-03 | Compare real-file golden tests against both grouped JSON and ordered occurrence goldens | ✅ Complete | videometa_golden_test.go, videometa_golden_ordered_test.go |
+| TASK-M23-04 | Update requirements, architecture, CI, and workflow docs to describe the stronger golden system and the removal of `truncated.mp4` from the corpus | ✅ Complete | docs/, README.md, CLAUDE.md, .github/workflows/ci.yml |

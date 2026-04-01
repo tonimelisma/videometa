@@ -61,22 +61,23 @@ func TestDecodeNonFastStartMP4(t *testing.T) {
 	c.Assert(result.VideoConfig.Height, qt.Equals, 240)
 }
 
-// Validates: REQ-NF-06
-func TestDecodeTruncatedMP4(t *testing.T) {
+// Validates: REQ-NF-06, REQ-TEST-04
+func TestDecodeIncompleteBoxMustError(t *testing.T) {
 	c := qt.New(t)
 
-	f, err := os.Open("testdata/truncated.mp4")
-	c.Assert(err, qt.IsNil)
-	defer func() { _ = f.Close() }()
+	data := []byte{
+		0, 0, 0, 20, 'f', 't', 'y', 'p',
+		'i', 's', 'o', 'm',
+	}
 
-	_, err = Decode(Options{
-		R:       f,
+	_, err := Decode(Options{
+		R:       readerSeekerFromBytes(data),
 		Sources: CONFIG,
 		HandleTag: func(ti TagInfo) error {
 			return nil
 		},
 	})
-	c.Assert(err, qt.IsNotNil, qt.Commentf("truncated file must return error"))
+	c.Assert(err, qt.IsNotNil, qt.Commentf("incomplete box payload must return error"))
 	c.Assert(IsInvalidFormat(err), qt.IsTrue, qt.Commentf("error: %v", err))
 }
 
@@ -1082,8 +1083,6 @@ func TestBoxExtendToEOF(t *testing.T) {
 func TestSeedCorpusDecodesSuccessfully(t *testing.T) {
 	// Ensure all committed valid test files decode without error.
 	// Catches regressions where valid files start returning errors.
-	// truncated.mp4 is intentionally excluded — it's a malformed file
-	// tested separately in TestKnownInvalidFilesMustError.
 	files := []string{
 		"testdata/minimal.mp4",
 		"testdata/nonfaststart.mp4",
@@ -1116,33 +1115,39 @@ func TestSeedCorpusDecodesSuccessfully(t *testing.T) {
 	}
 }
 
-// Validates: REQ-NF-06
-func TestKnownInvalidFilesMustError(t *testing.T) {
-	// Counterpart to TestSeedCorpusDecodesSuccessfully — known-invalid files
+// Validates: REQ-NF-06, REQ-TEST-04
+func TestKnownInvalidInputsMustError(t *testing.T) {
+	// Counterpart to TestSeedCorpusDecodesSuccessfully — known-invalid inputs
 	// must return InvalidFormatError, not succeed silently.
-	files := []struct {
-		path   string
+	inputs := []struct {
+		name   string
+		data   []byte
 		reason string
 	}{
-		{path: "testdata/truncated.mp4", reason: "file truncated mid-box"},
+		{
+			name:   "truncated-ftyp-payload",
+			data:   []byte{0, 0, 0, 20, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'},
+			reason: "box payload truncated before declared size",
+		},
+		{
+			name:   "truncated-box-header",
+			data:   []byte{0, 0, 0, 8, 'f', 't'},
+			reason: "box header truncated before fourcc",
+		},
 	}
 
-	for _, tt := range files {
-		t.Run(tt.path, func(t *testing.T) {
+	for _, tt := range inputs {
+		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			f, err := os.Open(tt.path)
-			c.Assert(err, qt.IsNil)
-			defer func() { _ = f.Close() }()
-
-			_, err = Decode(Options{
-				R:         f,
+			_, err := Decode(Options{
+				R:         readerSeekerFromBytes(tt.data),
 				Sources:   QUICKTIME | CONFIG,
 				HandleTag: func(ti TagInfo) error { return nil },
 			})
 			c.Assert(err, qt.IsNotNil,
-				qt.Commentf("%s (%s) must return error", tt.path, tt.reason))
+				qt.Commentf("%s (%s) must return error", tt.name, tt.reason))
 			c.Assert(IsInvalidFormat(err), qt.IsTrue,
-				qt.Commentf("%s must return InvalidFormatError, got: %T: %v", tt.path, err, err))
+				qt.Commentf("%s must return InvalidFormatError, got: %T: %v", tt.name, err, err))
 		})
 	}
 }

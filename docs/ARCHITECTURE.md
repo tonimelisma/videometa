@@ -43,8 +43,8 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-FILE-09 | `metadecoder_quicktime_pentax.go` | Pentax `TAGS` vendor metadata family | REQ-QT-* |
 | ARCH-FILE-10 | `metadecoder_sony_nrtm.go` | Sony NonRealTimeMeta vendor metadata parser (XAVC metadata) | REQ-QT-08 |
 | ARCH-FILE-11 | `helpers.go` | Rat[T], InvalidFormatError, value converters, ISO6709 parser | REQ-QT-06, REQ-NF-06 |
-| ARCH-FILE-12 | `gen/main.go` | Golden file generator and EXIF field-table generator | REQ-NF-04 |
-| ARCH-FILE-13 | `testdata/` | Test video files + golden JSON | REQ-TEST-* |
+| ARCH-FILE-12 | `gen/main.go` | Golden file generator (grouped JSON + ordered occurrence goldens) and EXIF field-table generator | REQ-NF-04 |
+| ARCH-FILE-13 | `testdata/` | Test video files + grouped JSON goldens + ordered occurrence goldens | REQ-TEST-* |
 | ARCH-FILE-14 | `.github/workflows/ci.yml` | CI with exiftool validation | REQ-NF-10 |
 
 ---
@@ -140,10 +140,10 @@ All code lives in one `videometa` package (no subpackages), following imagemeta'
 
 | ID | Design element | Traces to |
 |----|----------------|-----------|
-| ARCH-TEST-01 | `go generate ./gen` runs exiftool on committed test videos and regenerates EXIF field tables from the committed manifest | REQ-NF-04 |
-| ARCH-TEST-02 | Public validation compares videometa output against committed real-file golden JSON; synthetic temp-media tests remain regression-only | REQ-NF-04 |
-| ARCH-TEST-03 | CI runs `go generate ./gen` and diffs both golden JSON and generated EXIF field tables | REQ-NF-10 |
-| ARCH-TEST-04 | Normalization rules for comparison: float precision, string trimming, type coercion, and test-local flattening needed to compare against exiftool's lossy grouped JSON | REQ-NF-04 |
+| ARCH-TEST-01 | `go generate ./gen` runs exiftool on committed test videos, regenerates grouped JSON goldens plus ordered occurrence goldens, and refreshes EXIF field tables from the committed manifest | REQ-NF-04 |
+| ARCH-TEST-02 | Public validation compares videometa output against committed real-file grouped JSON goldens and duplicate-preserving ordered occurrence goldens; synthetic temp-media and malformed-input cases remain regression-only | REQ-NF-04 |
+| ARCH-TEST-03 | CI runs `go generate ./gen` and diffs grouped JSON goldens, ordered occurrence goldens, and generated EXIF field tables | REQ-NF-10 |
+| ARCH-TEST-04 | Comparison rules are split: grouped JSON gives broad exhaustive parity, while ordered occurrence goldens preserve duplicate tags and per-group occurrence order that grouped JSON would collapse | REQ-NF-04 |
 | ARCH-TEST-05 | Dedicated fuzz targets for full MP4 decode, EXIF/XMP/IPTC, and `meta` item parsing on seekable and non-seekable readers | REQ-NF-05 |
 | ARCH-TEST-06 | Benchmarks and allocation guards for representative streaming-sensitive paths | REQ-NF-03, REQ-NF-01 |
 

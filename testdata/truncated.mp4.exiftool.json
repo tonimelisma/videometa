@@ -1,8 +1,0 @@
-[{
-  "SourceFile": "../testdata/truncated.mp4",
-  "QuickTime": {
-    "MajorBrand": "isom",
-    "MinorVersion": "0.2.0",
-    "CompatibleBrands": ["isom","iso2","avc1","mp41"]
-  }
-}]

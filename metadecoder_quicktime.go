@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unicode/utf8"
 )
 
 // iTunes/QuickTime data type indicators (well-known types).
@@ -258,6 +259,42 @@ func cleanQTString(s string) string {
 	return b.String()
 }
 
+func decodeQuickTimeUserDataText(data []byte) string {
+	if utf8.Valid(data) {
+		return cleanQTString(string(data))
+	}
+
+	var b strings.Builder
+	b.Grow(len(data))
+	for _, c := range data {
+		if c < 0x80 {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteRune(quickTimeMacRoman[c-0x80])
+	}
+	return cleanQTString(b.String())
+}
+
+var quickTimeMacRoman = [...]rune{
+	'Ä', 'Å', 'Ç', 'É', 'Ñ', 'Ö', 'Ü', 'á',
+	'à', 'â', 'ä', 'ã', 'å', 'ç', 'é', 'è',
+	'ê', 'ë', 'í', 'ì', 'î', 'ï', 'ñ', 'ó',
+	'ò', 'ô', 'ö', 'õ', 'ú', 'ù', 'û', 'ü',
+	'†', '°', '¢', '£', '§', '•', '¶', 'ß',
+	'®', '©', '™', '´', '¨', '≠', 'Æ', 'Ø',
+	'∞', '±', '≤', '≥', '¥', 'µ', '∂', '∑',
+	'∏', 'π', '∫', 'ª', 'º', 'Ω', 'æ', 'ø',
+	'¿', '¡', '¬', '√', 'ƒ', '≈', '∆', '«',
+	'»', '…', '\u00a0', 'À', 'Ã', 'Õ', 'Œ', 'œ',
+	'–', '—', '“', '”', '‘', '’', '÷', '◊',
+	'ÿ', 'Ÿ', '⁄', '€', '‹', '›', 'ﬁ', 'ﬂ',
+	'‡', '·', '‚', '„', '‰', 'Â', 'Ê', 'Á',
+	'Ë', 'È', 'Í', 'Î', 'Ï', 'Ì', 'Ó', 'Ô',
+	'\uf8ff', 'Ò', 'Ú', 'Û', 'Ù', 'ı', 'ˆ', '˜',
+	'¯', '˘', '˙', '˚', '¸', '˝', '˛', 'ˇ',
+}
+
 // decodeTrackDiskNumber decodes the binary trkn/disk atom value.
 // Format: 2 bytes padding + uint16 number + uint16 total [+ 2 padding].
 // Returns "N of M" matching exiftool.
@@ -333,6 +370,9 @@ func freeformToTagName(mean, name string) string {
 
 // freeformTagNames maps com.apple.quicktime key names to exiftool tag names.
 var freeformTagNames = map[string]string{
+	"album":                                 "Album",
+	"artist":                                "Artist",
+	"comment":                               "Comment",
 	"make":                                  "Make",
 	"model":                                 "Model",
 	"software":                              "Software",
@@ -390,6 +430,7 @@ var ilstTagNames = map[string]string{
 	"\xa9day":                 "ContentCreateDate",
 	"\xa9too":                 "Encoder",
 	"\xa9cmt":                 "Comment",
+	"\xa9com":                 "Composer",
 	"\xa9gen":                 "Genre",
 	"\xa9wrt":                 "Composer",
 	"\xa9grp":                 "Grouping",

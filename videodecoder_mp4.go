@@ -115,6 +115,12 @@ func (d *videoDecoderMP4) decode() error {
 			// The current read position is just past the box header, so it's the data start.
 			d.mdatOffset = d.pos()
 			d.mdatSize = boxSize - uint64(d.pos()-startPos)
+			if d.opts.Sources.Has(QUICKTIME) {
+				restore := d.withQuickTimeNamespace("mdat")
+				d.emitQuickTimeTag("MediaDataSize", d.mdatSize)
+				d.emitQuickTimeTag("MediaDataOffset", d.mdatOffset)
+				restore()
+			}
 		case "free", "skip", "wide":
 			// Skip padding boxes.
 		default:
@@ -122,14 +128,6 @@ func (d *videoDecoderMP4) decode() error {
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
-	}
-
-	// Emit mdat metadata after all boxes are processed.
-	if d.mdatOffset > 0 && d.opts.Sources.Has(QUICKTIME) {
-		restore := d.withQuickTimeNamespace("mdat")
-		d.emitQuickTimeTag("MediaDataSize", d.mdatSize)
-		d.emitQuickTimeTag("MediaDataOffset", d.mdatOffset)
-		restore()
 	}
 
 	return nil
@@ -314,7 +312,11 @@ func (d *videoDecoderMP4) decodeMvhd() {
 		d.emitQuickTimeTag("PreferredVolume", fixedPoint88ToFloat(preferredVolume))
 
 		// Matrix (9 x 4 bytes = 36 bytes).
-		_ = d.readBytes(36)
+		var matrix [9]int32
+		for i := range matrix {
+			matrix[i] = d.read4s()
+		}
+		d.emitQuickTimeTag("MatrixStructure", formatMatrix(matrix))
 
 		// Preview, poster, selection, current time.
 		d.emitQuickTimeTag("PreviewTime", d.read4())
@@ -422,25 +424,21 @@ func (d *videoDecoderMP4) decodeTkhd() {
 	}
 
 	if d.opts.Sources.Has(QUICKTIME) {
-		// Exiftool's flattened QuickTime view takes generic tkhd tags from the
-		// first track, but image dimensions from the video track.
-		if d.currentTrackIndex == 1 {
-			d.emitQuickTimeTag("TrackHeaderVersion", version)
-			d.emitQuickTimeTag("TrackCreateDate", quickTimeToTime(creationTime))
-			d.emitQuickTimeTag("TrackModifyDate", quickTimeToTime(modificationTime))
-			d.emitQuickTimeTag("TrackID", trackID)
-			trackTimescale := d.movieTimescale
-			if trackTimescale == 0 {
-				trackTimescale = 1000
-			}
-			d.emitQuickTimeTag("TrackDuration", durationSeconds(duration, trackTimescale))
-			d.emitQuickTimeTag("TrackLayer", layer)
-			d.emitQuickTimeTag("TrackVolume", fixedPoint88ToFloat(volume))
+		d.emitQuickTimeTag("TrackHeaderVersion", version)
+		d.emitQuickTimeTag("TrackCreateDate", quickTimeToTime(creationTime))
+		d.emitQuickTimeTag("TrackModifyDate", quickTimeToTime(modificationTime))
+		d.emitQuickTimeTag("TrackID", trackID)
+		trackTimescale := d.movieTimescale
+		if trackTimescale == 0 {
+			trackTimescale = 1000
 		}
+		d.emitQuickTimeTag("TrackDuration", durationSeconds(duration, trackTimescale))
+		d.emitQuickTimeTag("TrackLayer", layer)
+		d.emitQuickTimeTag("TrackVolume", fixedPoint88ToFloat(volume))
+		d.emitQuickTimeTag("MatrixStructure", formatMatrix(matrix))
 		if width > 0 {
 			d.emitQuickTimeTag("ImageWidth", width)
 			d.emitQuickTimeTag("ImageHeight", height)
-			d.emitQuickTimeTag("MatrixStructure", formatMatrix(matrix))
 		}
 	}
 }
@@ -946,8 +944,11 @@ func (d *videoDecoderMP4) decodeAudioSampleEntry(entryStart int64, entrySize uin
 		if isEOF || subSize < 8 {
 			break
 		}
-		if subType.String() == "wave" {
+		switch subType.String() {
+		case "wave":
 			d.decodeWave(subStart, subSize)
+		case "btrt":
+			d.decodeBtrt()
 		}
 		d.seekToBoxEnd(subStart, subSize)
 	}
@@ -1101,7 +1102,7 @@ func (d *videoDecoderMP4) decodeUdta(udtaStart int64, udtaSize uint64) {
 					textSize := int(d.read2())
 					_ = d.read2() // language code
 					if textSize > 0 && textSize <= dataLen-4 {
-						text := cleanQTString(string(d.readBytes(textSize)))
+						text := decodeQuickTimeUserDataText(d.readBytes(textSize))
 						tagName := ilstAtomToTagName(boxTypeStr)
 						if tagName != "" {
 							d.emitQuickTimeTag(tagName, text)

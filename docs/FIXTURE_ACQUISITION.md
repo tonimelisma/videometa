@@ -147,7 +147,7 @@ Why they matter:
 Recommended acquisition:
 
 1. Prefer real original video files from known devices or workflows.
-2. Inspect candidates with `exiftool -n -json -g`.
+2. Inspect candidates with `exiftool -n -json -g` and, when duplicate-heavy vendor metadata is involved, `exiftool -a -n -G0 -S`.
 3. Keep only files that actually exercise the route named in the filename.
 4. Save each file under the matching target name above.
 
@@ -165,7 +165,7 @@ Public-download status:
    exiftool -n -json -g testdata/<fixture-name>
    ```
 
-4. If we decide the fixture should participate in the validated corpus, generate or refresh the local golden JSON with:
+4. If we decide the fixture should participate in the validated corpus, generate or refresh the local grouped and ordered goldens with:
 
    ```bash
    go generate ./gen

@@ -42,20 +42,6 @@ func flattenSourceTagsWhere(sourceTags SourceTags, keep func(TagInfo) bool) map[
 	return flat
 }
 
-func flattenSourceTagsWhereFirst(sourceTags SourceTags, keep func(TagInfo) bool) map[string]TagInfo {
-	flat := make(map[string]TagInfo)
-	for _, tag := range sourceTags.All() {
-		if !keep(tag) {
-			continue
-		}
-		if _, exists := flat[tag.Tag]; exists {
-			continue
-		}
-		flat[tag.Tag] = tag
-	}
-	return flat
-}
-
 func flattenAllTags(tags Tags) map[string]TagInfo {
 	flat := make(map[string]TagInfo)
 	for _, tag := range tags.All() {

@@ -13,7 +13,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | D-03 | VideoFormat enum | Single MP4 value; auto-detect MOV vs MP4 internally from ftyp brand |
 | D-04 | Format detection | Optional — auto-detect from ftyp if not specified |
 | D-05 | EXIF tag scope | Committed core EXIF field reference: 581 EXIF tags, 32 GPS tags, 5 Interop tags |
-| D-08 | Test system | Committed golden JSON + CI validation via GitHub Actions + exiftool |
+| D-08 | Test system | Committed grouped exiftool JSON + duplicate-preserving ordered exiftool goldens + CI validation via GitHub Actions |
 | D-09 | QuickTime tag names | Match exiftool exactly |
 | D-10 | Large file handling | Prefer io.ReadSeeker; io.Reader fallback (read+discard for mdat) |
 | D-11 | Unknown boxes | Skip silently; warn only for metadata-bearing boxes (e.g., unrecognized UUID) |
@@ -150,7 +150,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-NF-01 | Streaming architecture; no loading entire file into memory | — |
 | REQ-NF-02 | Target latency <500us for typical smartphone MP4 | — |
 | REQ-NF-03 | Benchmarks included in test suite | — |
-| REQ-NF-04 | All output validated against `exiftool -n -json` | D-08 |
+| REQ-NF-04 | Real-file golden validation uses both grouped `exiftool -n -json -g` output and duplicate-preserving ordered `exiftool -a -n -G0 -S` output | D-08 |
 | REQ-NF-05 | Fuzz tests for every decoder path | — |
 | REQ-NF-06 | No panics on malformed input; InvalidFormatError sentinel | — |
 | REQ-NF-07 | Go 1.24+ | — |
@@ -167,7 +167,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-TEST-01 | iPhone H.264 MP4 with GPS | Record with GPS enabled | P0 |
 | REQ-TEST-02 | iPhone H.265 HEVC MOV with GPS | Record with GPS enabled | P0 |
 | REQ-TEST-03 | Minimal MP4 (mvhd only) | FFmpeg synthetic | P1 |
-| REQ-TEST-04 | Truncated/corrupt MP4 | Truncate valid file | P1 |
+| REQ-TEST-04 | Malformed/corrupt MP4 regression inputs | Crafted inline malformed byte sequences | P1 |
 | REQ-TEST-05 | Non-fast-start MP4 (moov at end) | FFmpeg with -movflags 0 | P1 |
 | REQ-TEST-06 | Android MP4 | Documented local Pixel 9 Pro clip (`testdata/google.mp4`) | P2 |
 | REQ-TEST-07 | GoPro MP4 | Public GoPro shared clip (`testdata/gopro_action.mp4`) | P2 |
@@ -250,9 +250,9 @@ Status terms used below:
 | REQ-NF-01 | ARCH-IO-01 | io.go | io_test.go | Implemented |
 | REQ-NF-02 | ARCH-IO-04 | io.go | videometa_latency_test.go, videometa_bench_test.go | Validated |
 | REQ-NF-03 | ARCH-TEST-06 | videometa_bench_test.go | videometa_bench_test.go | Static |
-| REQ-NF-04 | ARCH-TEST-01 | gen/main.go | videometa_golden_test.go, videometa_oracle_test.go | Validated (real-file goldens); Implemented (synthetic regressions) |
+| REQ-NF-04 | ARCH-TEST-01 | gen/main.go | videometa_golden_test.go, videometa_oracle_test.go | Validated (real-file grouped + ordered goldens); Implemented (synthetic regressions) |
 | REQ-NF-05 | ARCH-TEST-05 | videometa_fuzz_test.go | videometa_fuzz_test.go | Implemented |
-| REQ-NF-06 | ARCH-ERR-01 | helpers.go | videometa_test.go, helpers_test.go | Validated |
+| REQ-NF-06 | ARCH-ERR-01 | helpers.go | videometa_test.go, helpers_test.go | Implemented |
 | REQ-NF-07 | — | go.mod | — | Static |
 | REQ-NF-08 | ARCH-DEP-01 | go.mod | — | Static |
 | REQ-NF-09 | — | LICENSE | — | Static |
@@ -260,7 +260,7 @@ Status terms used below:
 | REQ-TEST-01 | ARCH-TEST-01 | testdata/with_gps.mp4 | videometa_golden_test.go | Validated |
 | REQ-TEST-02 | ARCH-TEST-01 | testdata/apple.mov | videometa_golden_test.go | Validated |
 | REQ-TEST-03 | ARCH-TEST-01 | testdata/minimal.mp4 | videometa_golden_test.go | Validated |
-| REQ-TEST-04 | ARCH-TEST-01 | testdata/truncated.mp4 | videometa_golden_test.go | Validated |
+| REQ-TEST-04 | ARCH-TEST-02 | videometa_test.go | videometa_test.go | Implemented |
 | REQ-TEST-05 | ARCH-TEST-01 | testdata/nonfaststart.mp4 | videometa_golden_test.go | Validated |
 | REQ-TEST-06 | ARCH-TEST-01 | testdata/google.mp4 | videometa_fixture_test.go, videometa_golden_test.go | Validated |
 | REQ-TEST-07 | ARCH-TEST-01 | testdata/gopro_action.mp4 | videometa_fixture_test.go, videometa_golden_test.go | Validated |

@@ -117,7 +117,7 @@ func testTempOracleExhaustive(t *testing.T, c *qt.C, fileName string, data []byt
 		goldenMap, ok := goldenGroup.(map[string]any)
 		c.Assert(ok, qt.IsTrue, qt.Commentf("golden %s is not a map", group))
 
-		vmTags := goldenGroupTags(tags, group)
+		vmTags := goldenGroupTags(tags, group, goldenMap)
 		c.Assert(vmTags != nil, qt.IsTrue, qt.Commentf("no videometa tags for group %s", group))
 
 		compareAllGoldenTags(c, vmTags, goldenMap, group)
