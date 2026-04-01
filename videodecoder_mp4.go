@@ -422,10 +422,9 @@ func (d *videoDecoderMP4) decodeTkhd() {
 	}
 
 	if d.opts.Sources.Has(QUICKTIME) {
-		// Exiftool emits tkhd tags from the video track only. In standard MP4/MOV
-		// files, the video track has non-zero width. Audio-only tkhd tags are
-		// discarded to match exiftool.
-		if width > 0 {
+		// Exiftool's flattened QuickTime view takes generic tkhd tags from the
+		// first track, but image dimensions from the video track.
+		if d.currentTrackIndex == 1 {
 			d.emitQuickTimeTag("TrackHeaderVersion", version)
 			d.emitQuickTimeTag("TrackCreateDate", quickTimeToTime(creationTime))
 			d.emitQuickTimeTag("TrackModifyDate", quickTimeToTime(modificationTime))
@@ -437,6 +436,8 @@ func (d *videoDecoderMP4) decodeTkhd() {
 			d.emitQuickTimeTag("TrackDuration", durationSeconds(duration, trackTimescale))
 			d.emitQuickTimeTag("TrackLayer", layer)
 			d.emitQuickTimeTag("TrackVolume", fixedPoint88ToFloat(volume))
+		}
+		if width > 0 {
 			d.emitQuickTimeTag("ImageWidth", width)
 			d.emitQuickTimeTag("ImageHeight", height)
 			d.emitQuickTimeTag("MatrixStructure", formatMatrix(matrix))
@@ -536,7 +537,6 @@ func (d *videoDecoderMP4) decodeMdhd() {
 
 	// Language code: packed ISO-639-2/T.
 	langCode := d.read2()
-	lang := decodeISO639(langCode)
 
 	// Store for stts frame rate calculation.
 	d.mediaTimescale = timescale
@@ -547,10 +547,8 @@ func (d *videoDecoderMP4) decodeMdhd() {
 		d.emitQuickTimeTag("MediaModifyDate", quickTimeToTime(modificationTime))
 		d.emitQuickTimeTag("MediaTimeScale", timescale)
 		d.emitQuickTimeTag("MediaDuration", durationSeconds(duration, timescale))
-		// MOV files use Macintosh language codes (mdhd v0 with raw code 0 = English).
-		// Only emit MediaLanguageCode for ISO 639-2/T codes (MP4/ISOBMFF), matching exiftool.
-		if !d.isMOV || langCode != 0 {
-			d.emitQuickTimeTag("MediaLanguageCode", lang)
+		if mediaLanguageCode, ok := quickTimeMediaLanguageValue(langCode); ok {
+			d.emitQuickTimeTag("MediaLanguageCode", mediaLanguageCode)
 		}
 	}
 }
@@ -733,18 +731,34 @@ func (d *videoDecoderMP4) decodeStsd(stsdStart int64, stsdSize uint64) {
 
 	// Read first sample entry common header.
 	entrySize := d.read4()
-	codec := d.readFourCC()    // codec fourCC (e.g., "avc1", "hvc1", "mp4a")
-	_ = d.readBytes(6)         // reserved
-	_ = d.read2()              // data reference index
-	entryStart := d.pos() - 16 // 4 (size) + 4 (type) + 6 (reserved) + 2 (data ref idx)
+	codec := d.readFourCC() // codec fourCC (e.g., "avc1", "hvc1", "mp4a")
 
 	switch d.currentHandlerType {
+	case "meta":
+		if d.opts.Sources.Has(QUICKTIME) {
+			d.emitQuickTimeTag("MetaFormat", codec.String())
+		}
+		d.decodeMetadataSampleEntry(d.pos()-8, entrySize)
+	case "tmcd":
+		_ = d.readBytes(6)         // reserved
+		_ = d.read2()              // data reference index
+		entryStart := d.pos() - 16 // 4 (size) + 4 (type) + 6 (reserved) + 2 (data ref idx)
+		if d.opts.Sources.Has(QUICKTIME) {
+			d.emitQuickTimeTag("OtherFormat", codec.String())
+		}
+		d.decodeTimecodeSampleEntry(entryStart, entrySize)
 	case "soun":
+		_ = d.readBytes(6)         // reserved
+		_ = d.read2()              // data reference index
+		entryStart := d.pos() - 16 // 4 (size) + 4 (type) + 6 (reserved) + 2 (data ref idx)
 		if d.opts.Sources.Has(QUICKTIME) {
 			d.emitQuickTimeTag("AudioFormat", codec.String())
 		}
 		d.decodeAudioSampleEntry(entryStart, entrySize)
 	case "vide":
+		_ = d.readBytes(6)         // reserved
+		_ = d.read2()              // data reference index
+		entryStart := d.pos() - 16 // 4 (size) + 4 (type) + 6 (reserved) + 2 (data ref idx)
 		// Set codec in VideoConfig (first video track only).
 		if d.result.VideoConfig.Codec == "" {
 			d.result.VideoConfig.Codec = codec.String()
@@ -754,6 +768,9 @@ func (d *videoDecoderMP4) decodeStsd(stsdStart int64, stsdSize uint64) {
 		}
 		d.decodeVisualSampleEntry(entryStart, entrySize)
 	case "":
+		_ = d.readBytes(6)         // reserved
+		_ = d.read2()              // data reference index
+		entryStart := d.pos() - 16 // 4 (size) + 4 (type) + 6 (reserved) + 2 (data ref idx)
 		// No handler seen yet — assume video for backwards compatibility with
 		// files where hdlr appears after stsd (non-standard but possible).
 		if d.result.VideoConfig.Codec == "" {
@@ -764,11 +781,57 @@ func (d *videoDecoderMP4) decodeStsd(stsdStart int64, stsdSize uint64) {
 		}
 		d.decodeVisualSampleEntry(entryStart, entrySize)
 	default:
+		_ = d.readBytes(6) // reserved
+		_ = d.read2()      // data reference index
 		// Metadata tracks and other handler types — emit MetaFormat (codec fourCC).
 		if d.opts.Sources.Has(QUICKTIME) {
 			d.emitQuickTimeTag("MetaFormat", codec.String())
 		}
 	}
+}
+
+// decodeMetadataSampleEntry parses a metadata sample entry such as mett, which
+// stores null-terminated metadata type strings directly after the codec fourCC.
+func (d *videoDecoderMP4) decodeMetadataSampleEntry(entryStart int64, entrySize uint32) {
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/meta"))
+	defer restore()
+
+	entryEnd := boxEnd(entryStart, uint64(entrySize))
+	remaining := int(entryEnd - d.pos())
+	if remaining <= 0 {
+		return
+	}
+
+	data := d.readBytes(remaining)
+	if nul := bytes.IndexByte(data, 0); nul >= 0 {
+		data = data[:nul]
+	}
+	metaType := printableString(string(data))
+	if metaType == "" || !d.opts.Sources.Has(QUICKTIME) {
+		return
+	}
+	d.emitQuickTimeTag("MetaType", metaType)
+}
+
+// decodeTimecodeSampleEntry parses a tmcd sample description to extract the
+// other format and playback frame rate fields exiftool reports.
+func (d *videoDecoderMP4) decodeTimecodeSampleEntry(entryStart int64, entrySize uint32) {
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/tmcd"))
+	defer restore()
+
+	entryEnd := boxEnd(entryStart, uint64(entrySize))
+	if entryEnd-d.pos() < 16 {
+		return
+	}
+
+	_ = d.readBytes(8) // reserved + timecode flags
+	frameRateNum := d.read4()
+	frameRateDen := d.read4()
+
+	if !d.opts.Sources.Has(QUICKTIME) || frameRateDen == 0 {
+		return
+	}
+	d.emitQuickTimeTag("PlaybackFrameRate", float64(frameRateNum)/float64(frameRateDen))
 }
 
 // decodeVisualSampleEntry parses the visual sample entry fields (ISO 14496-12 §12.1.3).
@@ -832,6 +895,8 @@ func (d *videoDecoderMP4) decodeVisualSampleEntry(entryStart int64, entrySize ui
 			d.decodePasp()
 		case "btrt":
 			d.decodeBtrt()
+		case "colr":
+			d.decodeColr()
 		}
 
 		d.seekToBoxEnd(subStart, subSize)
@@ -923,6 +988,33 @@ func (d *videoDecoderMP4) decodePasp() {
 	}
 }
 
+// decodeColr parses the color information box.
+// For nclx, emit the color profile and the numeric primaries/transfer/matrix
+// fields that exiftool reports for modern MP4/MOV video tracks.
+func (d *videoDecoderMP4) decodeColr() {
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/colr"))
+	defer restore()
+
+	colorType := d.readFourCC().String()
+	if !d.opts.Sources.Has(QUICKTIME) {
+		return
+	}
+	if colorType != "nclx" {
+		return
+	}
+
+	d.emitQuickTimeTag("ColorProfiles", colorType)
+	colorPrimaries := d.read2()
+	transferCharacteristics := d.read2()
+	matrixCoefficients := d.read2()
+	fullRangeAndReserved := d.read1()
+
+	d.emitQuickTimeTag("ColorPrimaries", int(colorPrimaries))
+	d.emitQuickTimeTag("TransferCharacteristics", int(transferCharacteristics))
+	d.emitQuickTimeTag("MatrixCoefficients", int(matrixCoefficients))
+	d.emitQuickTimeTag("VideoFullRangeFlag", int((fullRangeAndReserved>>7)&0x1))
+}
+
 // decodeBtrt parses the bitrate box.
 func (d *videoDecoderMP4) decodeBtrt() {
 	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/btrt"))
@@ -973,6 +1065,29 @@ func (d *videoDecoderMP4) decodeUdta(udtaStart int64, udtaSize uint64) {
 				if dataLen > 0 && dataLen < 1024*1024 {
 					data := d.readBytes(dataLen)
 					d.decodePentaxTAGS(data)
+				}
+			}
+		case boxTypeStr == "FIRM":
+			if d.opts.Sources.Has(VENDOR) {
+				d.decodeGoProStringBox("GoPro/moov/udta/FIRM", "FirmwareVersion", int(boxSize)-8)
+			}
+		case boxTypeStr == "LENS":
+			if d.opts.Sources.Has(VENDOR) {
+				d.decodeGoProStringBox("GoPro/moov/udta/LENS", "LensSerialNumber", int(boxSize)-8)
+			}
+		case boxTypeStr == "CAME":
+			if d.opts.Sources.Has(VENDOR) {
+				d.decodeGoProHexBox("GoPro/moov/udta/CAME", "SerialNumberHash", int(boxSize)-8)
+			}
+		case boxTypeStr == "MUID":
+			if d.opts.Sources.Has(VENDOR) {
+				d.decodeGoProHexBox("GoPro/moov/udta/MUID", "MediaUID", int(boxSize)-8)
+			}
+		case boxTypeStr == "GPMF":
+			if d.opts.Sources.Has(VENDOR) {
+				dataLen := int(boxSize) - 8
+				if dataLen > 0 && dataLen < 1024*1024 {
+					d.decodeGoProGPMF(d.readBytes(dataLen))
 				}
 			}
 		case boxTypeStr == "uuid":
@@ -1207,7 +1322,7 @@ func (d *videoDecoderMP4) decodeIlstMdta(ilstStart int64, ilstSize uint64, keys 
 		keyIndex := uint32(atomType[0])<<24 | uint32(atomType[1])<<16 | uint32(atomType[2])<<8 | uint32(atomType[3])
 		if keyIndex > 0 && int(keyIndex) < len(keys) {
 			keyName := keys[keyIndex]
-			tagName := freeformToTagName("com.apple.quicktime", mdtaKeyToShortName(keyName))
+			tagName := mdtaKeyToTagName(keyName)
 			if tagName != "" {
 				d.decodeIlstAtomData(atomStart, atomSize, tagName)
 			}
@@ -1219,12 +1334,19 @@ func (d *videoDecoderMP4) decodeIlstMdta(ilstStart int64, ilstSize uint64, keys 
 	}
 }
 
-// mdtaKeyToShortName extracts the short key name from a fully qualified mdta key.
-// E.g., "com.apple.quicktime.creationdate" → "creationdate"
-func mdtaKeyToShortName(key string) string {
+// mdtaKeyToTagName maps a metadata item key to the exiftool tag name that
+// appears in the flattened QuickTime group.
+func mdtaKeyToTagName(key string) string {
 	const prefix = "com.apple.quicktime."
 	if len(key) > len(prefix) && key[:len(prefix)] == prefix {
-		return key[len(prefix):]
+		shortName := key[len(prefix):]
+		if tagName, ok := freeformTagNames[shortName]; ok {
+			return tagName
+		}
+		return ""
+	}
+	if tagName, ok := mdtaTagNames[key]; ok {
+		return tagName
 	}
 	return key
 }
@@ -1376,6 +1498,21 @@ func decodeISO639(packed uint16) string {
 		return "und" // undetermined
 	}
 	return s
+}
+
+func quickTimeMediaLanguageValue(langCode uint16) (any, bool) {
+	if langCode == 0 {
+		return nil, false
+	}
+	if langCode == 0x7fff {
+		return int(langCode), true
+	}
+
+	lang := decodeISO639(langCode)
+	if lang == "" {
+		return nil, false
+	}
+	return lang, true
 }
 
 // isASCIIFourCC returns true if all 4 bytes are printable ASCII (0x20-0x7E).
@@ -1566,13 +1703,18 @@ func (d *videoDecoderMP4) decodeTref(trefStart int64, trefSize uint64) {
 		if isEOF || subSize < 8 {
 			break
 		}
-		if subType.String() == "cdsc" {
+		switch subType.String() {
+		case "cdsc":
 			// cdsc contains one or more track IDs that this track describes.
 			if subSize >= 12 {
 				trackID := d.read4()
 				if d.opts.Sources.Has(QUICKTIME) {
 					d.emitQuickTimeTag("ContentDescribes", trackID)
 				}
+			}
+		case "tmcd":
+			if subSize >= 12 && d.opts.Sources.Has(QUICKTIME) {
+				d.emitQuickTimeTag("TimecodeTrack", d.read4())
 			}
 		}
 		d.seekToBoxEnd(subStart, subSize)
@@ -1591,8 +1733,11 @@ func (d *videoDecoderMP4) decodeGmhd(gmhdStart int64, gmhdSize uint64) {
 		if isEOF || subSize < 8 {
 			break
 		}
-		if subType.String() == "gmin" {
+		switch subType.String() {
+		case "gmin":
 			d.decodeGmin()
+		case "tmcd":
+			d.decodeTmcdMediaInfo(subStart, subSize)
 		}
 		d.seekToBoxEnd(subStart, subSize)
 	}
@@ -1618,5 +1763,74 @@ func (d *videoDecoderMP4) decodeGmin() {
 		d.emitQuickTimeTag("GenGraphicsMode", int(graphicsMode))
 		d.emitQuickTimeTag("GenOpColor", fmt.Sprintf("%d %d %d", r, g, b))
 		d.emitQuickTimeTag("GenBalance", fixedPoint88ToFloat(balance))
+	}
+}
+
+// decodeTmcdMediaInfo parses the QuickTime timecode media-info container.
+func (d *videoDecoderMP4) decodeTmcdMediaInfo(tmcdStart int64, tmcdSize uint64) {
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/gmhd/tmcd"))
+	defer restore()
+
+	tmcdEnd := boxEnd(tmcdStart, tmcdSize)
+	for d.pos() < tmcdEnd {
+		subStart := d.pos()
+		subSize, subType, isEOF := d.readBoxHeader()
+		if isEOF || subSize < 8 {
+			break
+		}
+		if subType.String() == "tcmi" {
+			d.decodeTcmi(int(subSize) - 8)
+		}
+		d.seekToBoxEnd(subStart, subSize)
+	}
+}
+
+// decodeTcmi parses the timecode media-info payload for font and color fields.
+func (d *videoDecoderMP4) decodeTcmi(payloadLen int) {
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/gmhd/tmcd/tcmi"))
+	defer restore()
+
+	if payloadLen < 25 {
+		d.skip(int64(payloadLen))
+		return
+	}
+
+	_ = d.read4() // reserved
+	textFont := d.read2()
+	textFace := d.read2()
+	textSize := d.read2()
+	_ = d.read2() // reserved
+	textR := d.read2()
+	textG := d.read2()
+	textB := d.read2()
+	bgR := d.read2()
+	bgG := d.read2()
+	bgB := d.read2()
+	fontNameLen := int(d.read1())
+
+	fontName := ""
+	if remaining := payloadLen - 25; fontNameLen > 0 && remaining > 0 {
+		if fontNameLen > remaining {
+			fontNameLen = remaining
+		}
+		fontName = printableString(string(d.readBytes(fontNameLen)))
+		remaining -= fontNameLen
+		if remaining > 0 {
+			d.skip(int64(remaining))
+		}
+	} else if payloadLen > 25 {
+		d.skip(int64(payloadLen - 25))
+	}
+
+	if !d.opts.Sources.Has(QUICKTIME) {
+		return
+	}
+	d.emitQuickTimeTag("TextFont", int(textFont))
+	d.emitQuickTimeTag("TextFace", int(textFace))
+	d.emitQuickTimeTag("TextSize", int(textSize))
+	d.emitQuickTimeTag("TextColor", fmt.Sprintf("%d %d %d", textR, textG, textB))
+	d.emitQuickTimeTag("BackgroundColor", fmt.Sprintf("%d %d %d", bgR, bgG, bgB))
+	if fontName != "" {
+		d.emitQuickTimeTag("FontName", fontName)
 	}
 }

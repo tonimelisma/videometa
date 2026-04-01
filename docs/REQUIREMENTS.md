@@ -169,8 +169,8 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-TEST-03 | Minimal MP4 (mvhd only) | FFmpeg synthetic | P1 |
 | REQ-TEST-04 | Truncated/corrupt MP4 | Truncate valid file | P1 |
 | REQ-TEST-05 | Non-fast-start MP4 (moov at end) | FFmpeg with -movflags 0 | P1 |
-| REQ-TEST-06 | Android MP4 | Record on Android | P2 |
-| REQ-TEST-07 | GoPro MP4 | Source from device | P2 |
+| REQ-TEST-06 | Android MP4 | Documented local Pixel 9 Pro clip (`testdata/google.mp4`) | P2 |
+| REQ-TEST-07 | GoPro MP4 | Public GoPro shared clip (`testdata/gopro_action.mp4`) | P2 |
 | REQ-TEST-08 | DJI drone MP4 | Source from device | P2 |
 | REQ-TEST-09 | Professional camera MOV | Canon/Sony/Panasonic | P2 |
 | REQ-TEST-10 | MP4 with 64-bit box sizes | Crafted or >4GB file | P2 |
@@ -262,8 +262,8 @@ Status terms used below:
 | REQ-TEST-03 | ARCH-TEST-01 | testdata/minimal.mp4 | videometa_golden_test.go | Validated |
 | REQ-TEST-04 | ARCH-TEST-01 | testdata/truncated.mp4 | videometa_golden_test.go | Validated |
 | REQ-TEST-05 | ARCH-TEST-01 | testdata/nonfaststart.mp4 | videometa_golden_test.go | Validated |
-| REQ-TEST-06 | ARCH-TEST-01 | — | — | Pending |
-| REQ-TEST-07 | ARCH-TEST-01 | — | — | Pending |
+| REQ-TEST-06 | ARCH-TEST-01 | testdata/google.mp4 | videometa_fixture_test.go, videometa_golden_test.go | Validated |
+| REQ-TEST-07 | ARCH-TEST-01 | testdata/gopro_action.mp4 | videometa_fixture_test.go, videometa_golden_test.go | Validated |
 | REQ-TEST-08 | ARCH-TEST-01 | — | — | Pending |
 | REQ-TEST-09 | ARCH-TEST-01 | testdata/sony_a6700.mp4 | videometa_golden_test.go | Validated |
 | REQ-TEST-10 | ARCH-TEST-01 | — | — | Pending |

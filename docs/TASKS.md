@@ -26,6 +26,7 @@ Tasks organized by milestone. Each task traces to requirements (`REQ-*`) and arc
 | M18: NRTM Streaming Guard | ✅ Complete |
 | M20: Pre-1.0 API Reset | ✅ Complete |
 | M21: API Hardening + Evidence Policy | ✅ Complete |
+| M22: Fixture Acquisition Bootstrap | ✅ Complete |
 
 ---
 
@@ -142,11 +143,13 @@ Consistency fixes for error typing in IO paths, fuzz target documentation, test 
 
 | Task | Description | Status | Files |
 |------|-------------|--------|-------|
-| TASK-BL-01 | Android MP4 test file + golden test | Pending | testdata/ |
-| TASK-BL-02 | GoPro MP4 test file + golden test | Pending | testdata/ |
+| TASK-BL-01 | Android MP4 fixture acquired + local-fixture validation test | ✅ Complete | testdata/google.mp4, videometa_fixture_test.go |
+| TASK-BL-02 | GoPro MP4 fixture acquired + local-fixture validation test | ✅ Complete | testdata/gopro_action.mp4, videometa_fixture_test.go |
 | TASK-BL-03 | DJI drone MP4 test file + golden test | Pending | testdata/ |
 | TASK-BL-04 | Pro camera MOV test file + golden test | Pending | testdata/ |
 | TASK-BL-05 | 64-bit box size test file | Pending | testdata/ |
+| TASK-BL-06 | Android / Pixel real-file exiftool golden parity (`moov/meta` mdta keys, track metadata) | ✅ Complete | videodecoder_mp4.go, videometa_golden_test.go |
+| TASK-BL-07 | GoPro real-file exiftool parity (`udta` vendor boxes, GPMF-derived metadata, timecode metadata) | ✅ Complete | videodecoder_mp4.go, metadecoder_quicktime_gopro.go, videometa_golden_test.go |
 
 ---
 
@@ -222,3 +225,15 @@ Finish the pre-1.0 surface cleanup: make namespace queries fully lossless, freez
 | TASK-M21-02 | Replace lossy namespace maps with lossless `NamespaceTags`, preserve duplicate tags within a namespace, and add explicit namespace-contract tests using real files | ✅ Complete | videometa.go, videometa_test.go, videodecoder_mp4.go |
 | TASK-M21-03 | Add allocation guards for representative streaming-sensitive paths (`mdat`, Sony NRTM `idat`, `meta/iloc`) | ✅ Complete | videometa_alloc_test.go, testhelpers_test.go |
 | TASK-M21-04 | Add README examples, support table, and compatibility note that align public claims with validated real-fixture coverage | ✅ Complete | README.md, example_test.go, docs/ARCHITECTURE.md, docs/REQUIREMENTS.md |
+
+---
+
+## Milestone 22: Fixture Acquisition Bootstrap
+
+Record the remaining real-video fixture gaps and make the publicly downloadable ones easy to fetch locally without committing the media.
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M22-01 | Add a manifest-driven bootstrap script that downloads every verified official sample fixture into `testdata/` with header/size checks | ✅ Complete | scripts/bootstrap-fixtures.sh, scripts/fixture_bootstrap.tsv |
+| TASK-M22-02 | Document the remaining fixture gaps, split them into scriptable vs manual-only, and record source pages plus local target filenames | ✅ Complete | docs/FIXTURE_ACQUISITION.md |
+| TASK-M22-03 | Extend `.gitignore` for local-only fixture targets so downloaded media never appears as staged repo content by accident | ✅ Complete | .gitignore |

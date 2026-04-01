@@ -86,7 +86,7 @@ result, err := videometa.Decode(videometa.Options{
 | `XMP` | XMP/RDF XML metadata |
 | `IPTC` | IPTC-IIM records (keywords, captions) |
 | `QUICKTIME` | Standard/container-native QuickTime metadata |
-| `VENDOR` | Vendor-specific container metadata families (Pentax `TAGS`, Sony UUID/NRTM) |
+| `VENDOR` | Vendor-specific container metadata families (Pentax `TAGS`, Sony UUID/NRTM, GoPro `udta`/GPMF) |
 | `CONFIG` | Request flag for `VideoConfig`; not emitted as tags |
 | `COMPOSITE` | Derived tags materialized only by `DecodeAll` |
 
@@ -114,8 +114,8 @@ Public support claims in this README are backed by real video fixtures only.
 
 | Family | Current claim |
 |--------|---------------|
-| QuickTime/container-native metadata on committed fixtures | Validated |
-| Vendor container metadata on committed fixtures (`Pentax/moov/udta/TAGS`, Sony UUID/NRTM, Apple MOV mdta) | Validated |
+| QuickTime/container-native metadata on committed fixtures and documented local Apple/Sony/Google/GoPro real fixtures | Validated |
+| Vendor container metadata on committed fixtures (`Pentax/moov/udta/TAGS`, Sony UUID/NRTM, Apple MOV mdta, GoPro `udta`/GPMF) | Validated |
 | Additional embedded routes implemented in code and regression tests | Not promoted to README-level claims until real-fixture validation exists |
 
 ## Benchmarks
@@ -127,7 +127,7 @@ BenchmarkDecodeMinimalMP4ConfigOnly-8     672285    1803 ns/op     608 B/op     
 
 ## Status
 
-v0.1.0 development snapshot — ISOBMFF box parser, EXIF, XMP, IPTC, QuickTime native, vendor metadata families (Pentax `TAGS`, Sony UUID-PROF, Sony USMT/MTDT, Sony NRTM), and Apple MOV metadata are implemented. Validation status is real-file-only; synthetic tests remain regression coverage only and do not justify support claims.
+v0.1.0 development snapshot — ISOBMFF box parser, EXIF, XMP, IPTC, QuickTime native, vendor metadata families (Pentax `TAGS`, Sony UUID-PROF, Sony USMT/MTDT, Sony NRTM, GoPro `udta`/GPMF), Apple MOV metadata, and Android `mdta` metadata are implemented. Validation status is real-file-only; synthetic tests remain regression coverage only and do not justify support claims.
 
 ## Compatibility Policy
 

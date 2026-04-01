@@ -162,7 +162,7 @@ func goldenGroupTags(tags Tags, group string) map[string]TagInfo {
 	case "XMP":
 		return flattenSourceTags(tags.XMP())
 	case "XML":
-		return flattenSourceTagsWhere(tags.Vendor(), func(tag TagInfo) bool {
+		return flattenSourceTagsWhereFirst(tags.Vendor(), func(tag TagInfo) bool {
 			return strings.HasSuffix(tag.Namespace, "/nrtm")
 		})
 	case "Composite":
@@ -282,6 +282,26 @@ func TestGoldenAppleMOV(t *testing.T) {
 	}
 	c := qt.New(t)
 	testGoldenExhaustive(c, "testdata/apple.mov", "testdata/apple.mov.exiftool.json",
+		[]string{"QuickTime", "Composite"})
+}
+
+// Validates: REQ-NF-04, REQ-QT-03, REQ-QT-04, REQ-TEST-06
+func TestGoldenGoogleMP4(t *testing.T) {
+	if _, err := os.Stat("testdata/google.mp4"); os.IsNotExist(err) {
+		t.Skip("google.mp4 not available")
+	}
+	c := qt.New(t)
+	testGoldenExhaustive(c, "testdata/google.mp4", "testdata/google.mp4.exiftool.json",
+		[]string{"QuickTime", "Composite"})
+}
+
+// Validates: REQ-NF-04, REQ-QT-04, REQ-TEST-07
+func TestGoldenGoProActionMP4(t *testing.T) {
+	if _, err := os.Stat("testdata/gopro_action.mp4"); os.IsNotExist(err) {
+		t.Skip("gopro_action.mp4 not available")
+	}
+	c := qt.New(t)
+	testGoldenExhaustive(c, "testdata/gopro_action.mp4", "testdata/gopro_action.mp4.exiftool.json",
 		[]string{"QuickTime", "Composite"})
 }
 
