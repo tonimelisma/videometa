@@ -1,5 +1,5 @@
 [{
-  "SourceFile": "testdata/gopro_action.mp4",
+  "SourceFile": "../testdata/gopro_action.mp4",
   "QuickTime": {
     "MajorBrand": "mp41",
     "MinorVersion": "2013.10.18",

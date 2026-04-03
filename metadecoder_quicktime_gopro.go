@@ -235,6 +235,10 @@ func (d *videoDecoderMP4) emitGoProGPMFTag(namespace, deviceID string, record go
 			value = fmt.Sprintf("%d %d", values[0], values[1])
 			emit = true
 		}
+	case "VFPS":
+		tagName = "VideoFrameRate"
+		value = strings.Join(goProUint32Strings(record.payload), " ")
+		emit = true
 	case "HSGT":
 		tagName = "HindsightSettings"
 		value = goProCString(record.payload)
@@ -328,11 +332,10 @@ func (d *videoDecoderMP4) emitGoProGPMFTag(namespace, deviceID string, record go
 		value = goProFirstFloat(record.payload)
 		emit = true
 	case "DVNM":
-		if deviceID == "HLMT" {
-			tagName = "DeviceName"
-			value = goProCString(record.payload)
-			emit = true
-		}
+		_ = deviceID
+		tagName = "DeviceName"
+		value = goProCString(record.payload)
+		emit = true
 	}
 
 	if !emit {

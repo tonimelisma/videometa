@@ -17,6 +17,8 @@ Run the bootstrap script to download every fixture that currently has a verified
 ./scripts/bootstrap-fixtures.sh
 ```
 
+The script is intentionally full-service, but it now downloads smaller fixtures first so the commonly used validation assets come back quickly instead of blocking on the multi-hundred-megabyte DJI samples.
+
 Today that means three fixtures:
 
 - `testdata/dji_ronin4d_4k_prores4444_25fps.mov`

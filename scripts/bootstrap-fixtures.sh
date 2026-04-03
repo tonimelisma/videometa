@@ -15,7 +15,8 @@ Usage:
 
 By default, downloads every fixture listed in scripts/fixture_bootstrap.tsv into
 the repo's testdata/ directory. Existing files with the expected byte size are
-left untouched. Downloads are resumable.
+left untouched. Downloads are resumable. Smaller fixtures are downloaded first
+so common validation assets are restored quickly.
 
 Supported manifest kinds:
   direct       Download directly from a verified asset URL.
@@ -210,6 +211,19 @@ list_manifest() {
   ' "${manifest}"
 }
 
+sorted_manifest_rows() {
+  awk -F '\t' '
+    NR == 1 { next }
+    {
+      size = $7
+      if (size == "") {
+        size = "999999999999999"
+      }
+      printf "%015d\t%s\t%s\n", size + 0, $2, $0
+    }
+  ' "${manifest}" | sort -t $'\t' -k1,1n -k2,2 | cut -f3-
+}
+
 if [[ ! -f "${manifest}" ]]; then
   die "manifest not found: ${manifest}"
 fi
@@ -234,11 +248,8 @@ esac
 printf 'Downloading all bootstrap fixtures listed in %s\n' "${manifest}"
 
 while IFS=$'\t' read -r id target kind locator source_page expected_type expected_size description; do
-  if [[ "${id}" == "id" ]]; then
-    continue
-  fi
   download_fixture "${id}" "${target}" "${kind}" "${locator}" "${source_page}" "${expected_type}" "${expected_size}" "${description}"
-done < "${manifest}"
+done < <(sorted_manifest_rows)
 
 cat <<'EOF'
 

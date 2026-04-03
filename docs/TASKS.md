@@ -237,6 +237,7 @@ Record the remaining real-video fixture gaps and make the publicly downloadable 
 | TASK-M22-01 | Add a manifest-driven bootstrap script that downloads every verified official sample fixture into `testdata/` with header/size checks | ✅ Complete | scripts/bootstrap-fixtures.sh, scripts/fixture_bootstrap.tsv |
 | TASK-M22-02 | Document the remaining fixture gaps, split them into scriptable vs manual-only, and record source pages plus local target filenames | ✅ Complete | docs/FIXTURE_ACQUISITION.md |
 | TASK-M22-03 | Extend `.gitignore` for local-only fixture targets so downloaded media never appears as staged repo content by accident | ✅ Complete | .gitignore |
+| TASK-M22-04 | Make the full-service bootstrap restore smaller/high-value fixtures first so GoPro and similar validation assets are not blocked by huge downloads | ✅ Complete | scripts/bootstrap-fixtures.sh, docs/FIXTURE_ACQUISITION.md, CLAUDE.md |
 
 ---
 

@@ -55,6 +55,32 @@ func TestGoogleMP4ColorProfileTags(t *testing.T) {
 	c.Assert(fullRangeFlag.Value, qt.Equals, 0)
 }
 
+// Validates: REQ-QT-04, REQ-TEST-07
+func TestGoProMP4RepeatedVendorTags(t *testing.T) {
+	if _, err := os.Stat("testdata/gopro_action.mp4"); os.IsNotExist(err) {
+		t.Skip("gopro_action.mp4 not available")
+	}
+
+	c := qt.New(t)
+
+	f, err := os.Open("testdata/gopro_action.mp4")
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	metadata, err := DecodeAll(Options{R: f, Sources: QUICKTIME | VENDOR})
+	c.Assert(err, qt.IsNil)
+
+	deviceNames := metadata.Tags.Vendor().FindInNamespace("GoPro/moov/udta/GPMF", "DeviceName")
+	c.Assert(deviceNames, qt.HasLen, 3)
+	c.Assert(deviceNames[0].Value, qt.Equals, "Global Settings")
+	c.Assert(deviceNames[1].Value, qt.Equals, "Large FOV")
+	c.Assert(deviceNames[2].Value, qt.Equals, "Highlights")
+
+	videoFrameRates := metadata.Tags.Vendor().FindInNamespace("GoPro/moov/udta/GPMF", "VideoFrameRate")
+	c.Assert(videoFrameRates, qt.HasLen, 1)
+	c.Assert(videoFrameRates[0].Value, qt.Equals, "30000 1001")
+}
+
 func assertLocalFixtureAvailable(c *qt.C, mediaPath string) {
 	c.Helper()
 

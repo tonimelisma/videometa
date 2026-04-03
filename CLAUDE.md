@@ -94,9 +94,10 @@ Small test videos (< 50 KB) are committed to git. Large real-world test videos a
 | File | Size | Provenance | Golden JSON (committed) |
 |------|------|-----------|------------------------|
 | `testdata/apple.mov` | 110 MB | iPhone 15 Pro, HEVC | `apple.mov.exiftool.json` |
+| `testdata/gopro_action.mp4` | 67 MB | GoPro HERO12 Black public shared clip | `gopro_action.mp4.exiftool.json` |
 | `testdata/sony_a6700.mp4` | 67 MB | Sony A6700, XAVC | `sony_a6700.mp4.exiftool.json` |
 
-These files have conditional-skip golden tests (`TestGoldenAppleMOV`, `TestGoldenSonyA6700`) that run when the file is present and skip gracefully in CI. When working in a worktree, copy them from the main repo (see Step 2 in Dev Process).
+These files have conditional-skip golden tests (`TestGoldenAppleMOV`, `TestGoldenGoProActionMP4`, `TestGoldenSonyA6700`) that run when the file is present and skip gracefully in CI. When working in a worktree, copy them from the main repo (see Step 2 in Dev Process).
 
 ### Decoder Approach
 
@@ -170,7 +171,7 @@ Work is done in increments. Do not ask permission, do not skip any step.
 2. Create a branch with the naming convention: `<type>/<task-name>` (e.g., `feat/isobmff-parser`). Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
 3. **Copy gitignored test files into the worktree.** Large test videos (`apple.mov`, `sony_a6700.mp4`, etc.) are gitignored and won't appear in worktrees. Copy or symlink them from the main repo:
    ```
-   for f in testdata/apple.mov testdata/sony_a6700.mp4; do
+   for f in testdata/apple.mov testdata/gopro_action.mp4 testdata/sony_a6700.mp4; do
      [ -f "/Users/tonimelisma/Development/videometa/$f" ] && \
        cp "/Users/tonimelisma/Development/videometa/$f" "<worktree>/$f"
    done
