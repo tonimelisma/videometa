@@ -33,7 +33,7 @@ io.ReadSeeker (or io.Reader fallback)
 |----|------|---------|-----------|
 | ARCH-FILE-01 | `videometa.go` | Public API: Decode, DecodeAll, Metadata, Options, TagInfo, Tags, SourceTags, NamespaceTags, Source, VideoFormat, DecodeResult, VideoConfig | REQ-API-* |
 | ARCH-FILE-02 | `io.go` | streamReader: binary reads, byte-order, seek, buffer pool, panic control flow | REQ-NF-01, REQ-NF-02 |
-| ARCH-FILE-03 | `videodecoder_mp4.go` | ISOBMFF box parser + metadata routing, including bounded Sony NRTM `idat` XML scans | REQ-BOX-* |
+| ARCH-FILE-03 | `videodecoder_mp4.go` | ISOBMFF box parser + metadata routing, including bounded Sony NRTM `idat` XML scans and exiftool-style hybrid sample-description child-atom detection | REQ-BOX-* |
 | ARCH-FILE-03A | `videodecoder_meta_items.go` | `meta/iloc` item parsing, `idat` construction-method validation, non-seekable `idat` buffering, and EXIF/XMP item extraction | REQ-EXIF-06, REQ-XMP-04 |
 | ARCH-FILE-04 | `metadecoder_exif.go` | EXIF IFD parser | REQ-EXIF-01..06 |
 | ARCH-FILE-05 | `metadecoder_exif_fields.go` | Generated EXIF/GPS/Interop tag name tables from `gen/exif_fields_reference.json` (581/32/5 committed reference) | REQ-EXIF-04 |
@@ -56,7 +56,7 @@ io.ReadSeeker (or io.Reader fallback)
 | ARCH-BOX-01 | Recursive descent over known container boxes (`moov`, `trak`, `mdia`, `minf`, `stbl`, `udta`, `meta`) with bounded depth | Keeps code local to each container while preserving streaming behavior | REQ-BOX-01..05, REQ-NF-06 |
 | ARCH-BOX-02 | `readBoxHeader()` returns `(totalSize, fourcc, isEOF)` | Core primitive for all box navigation | REQ-BOX-01..04 |
 | ARCH-BOX-03 | Skip mdat by seeking (ReadSeeker) or read+discard (Reader) | mdat can be gigabytes | REQ-BOX-05, REQ-API-03 |
-| ARCH-BOX-04 | Routing by container context plus metadata sub-box handlers (`uuid`, `meta`, `iloc`, `iinf`, `pitm`, `idat`, `ilst`) | Covers EXIF/XMP UUID paths, item-info paths, QuickTime metadata, and vendor metadata; `construction method 1` reads are range-checked against `idat` and buffered for non-seekable readers, while Sony NRTM XML only scans `idat` directly when the payload is below the 1 MB XML parse gate | REQ-BOX-07, REQ-BOX-08 |
+| ARCH-BOX-04 | Routing by container context plus metadata sub-box handlers (`uuid`, `meta`, `iloc`, `iinf`, `pitm`, `idat`, `ilst`) | Covers EXIF/XMP UUID paths, item-info paths, QuickTime metadata, and vendor metadata; `construction method 1` reads are range-checked against `idat` and buffered for non-seekable readers, Sony NRTM XML only scans `idat` directly when the payload is below the 1 MB XML parse gate, and QuickTime sample-description child atoms are only promoted when the trailing bytes form the same clean atom chain that exiftool's `ProcessHybrid` accepts | REQ-BOX-07, REQ-BOX-08 |
 | ARCH-BOX-05 | ftyp validation: check major brand and compatible brands | Detect MOV vs MP4 internally | REQ-BOX-06, REQ-API-04 |
 
 ### Box Path Routing Table
@@ -66,7 +66,7 @@ io.ReadSeeker (or io.Reader fallback)
 | `ftyp` | Validate brand, set MOV/MP4 mode |
 | `moov/mvhd` | → CONFIG: timestamps, duration, timescale |
 | `moov/trak/tkhd` | → CONFIG: dimensions, rotation |
-| `moov/trak/mdia/minf/stbl/stsd` | → CONFIG: codec fourcc + params |
+| `moov/trak/mdia/minf/stbl/stsd` | → CONFIG: codec fourcc + params; sample-entry child atoms (`fiel`, `colr`, `pasp`, `btrt`) are promoted only when the entry tail contains a clean exiftool-style child-atom chain |
 | `moov/udta/meta` | Parse as FullBox, descend |
 | `moov/udta/meta/ilst` | → QuickTime decoder |
 | `moov/udta/meta/ilst/----` | → QuickTime freeform decoder |

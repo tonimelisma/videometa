@@ -40,6 +40,8 @@ These real files are already part of the local validation corpus:
 |---|---|---|---|
 | `testdata/google.mp4` | Android phone clip with real smartphone metadata and GPS behavior | Manual local file already present | Pixel 9 Pro original recording |
 | `testdata/gopro_action.mp4` | GoPro action-camera clip with real GoPro metadata | Scriptable now | [GoPro share page](https://gopro.com/v/8GodrO3G8bNK4) |
+| `testdata/dji_inspire3_car_4k120_rec709.mov` | DJI drone fixture | Scriptable now, downloaded locally | [DJI Inspire 3 Samples](https://www.dji.com/inspire-3/samples) |
+| `testdata/dji_ronin4d_4k_prores4444_25fps.mov` | Professional camera fixture beyond the existing Sony A6700 sample | Scriptable now, downloaded locally | [DJI Ronin 4D Samples](https://www.dji.com/ronin-4d/samples) |
 | `testdata/apple.mov` | Apple / iPhone MOV fixture | Manual local file already present | iPhone 15 Pro original recording |
 | `testdata/sony_a6700.mp4` | Sony professional-camera fixture | Manual local file already present | Sony A6700 original recording |
 
@@ -47,8 +49,6 @@ These real files are already part of the local validation corpus:
 
 | Local filename | Why we need it | Acquisition mode | Current source |
 |---|---|---|---|
-| `testdata/dji_ronin4d_4k_prores4444_25fps.mov` | Professional camera fixture beyond the existing Sony A6700 sample | Scriptable now | [DJI Ronin 4D Samples](https://www.dji.com/ronin-4d/samples) |
-| `testdata/dji_inspire3_car_4k120_rec709.mov` | DJI drone fixture | Scriptable now | [DJI Inspire 3 Samples](https://www.dji.com/inspire-3/samples) |
 | `testdata/panasonic_pro_camera.mov` | Panasonic/LUMIX professional camera fixture | Manual only | [LUMIX Cinema](https://shop.panasonic.com/pages/lumix-cinema), [GH5 Video Gallery](https://www.panasonic.com/global/consumer/lumix-index/gh/gh5_video.html), [GH5S Video Gallery](https://www.panasonic.com/global/consumer/lumix-index/gh/gh5s_video.html) |
 | `testdata/canon_pro_camera.mov` | Canon professional camera fixture | Manual only | [Canon EOS C70](https://www.usa.canon.com/internet/portal/us/home/products/details/cameras/cinema-eos/eos-c70), [Canon EOS R5 C](https://www.usa.canon.com/internet/portal/us/home/products/details/cameras/cinema-eos/eos-r5-c) |
 | `testdata/exif_uuid_video.mov` | Real video carrying EXIF in a BMFF `uuid` box | Manual only | No verified public original-file download URL currently tracked |

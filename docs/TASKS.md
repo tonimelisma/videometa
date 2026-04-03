@@ -145,8 +145,8 @@ Consistency fixes for error typing in IO paths, fuzz target documentation, test 
 |------|-------------|--------|-------|
 | TASK-BL-01 | Android MP4 fixture acquired + local-fixture validation test | ✅ Complete | testdata/google.mp4, videometa_fixture_test.go |
 | TASK-BL-02 | GoPro MP4 fixture acquired + local-fixture validation test | ✅ Complete | testdata/gopro_action.mp4, videometa_fixture_test.go |
-| TASK-BL-03 | DJI drone MP4 test file + golden test | Pending | testdata/ |
-| TASK-BL-04 | Pro camera MOV test file + golden test | Pending | testdata/ |
+| TASK-BL-03 | DJI drone MP4 test file + golden test | ✅ Complete | testdata/dji_inspire3_car_4k120_rec709.mov, videometa_fixture_test.go, videometa_golden_test.go |
+| TASK-BL-04 | Pro camera MOV test file + golden test | ✅ Complete | testdata/dji_ronin4d_4k_prores4444_25fps.mov, videometa_fixture_test.go, videometa_golden_test.go |
 | TASK-BL-05 | 64-bit box size test file | Pending | testdata/ |
 | TASK-BL-06 | Android / Pixel real-file exiftool golden parity (`moov/meta` mdta keys, track metadata) | ✅ Complete | videodecoder_mp4.go, videometa_golden_test.go |
 | TASK-BL-07 | GoPro real-file exiftool parity (`udta` vendor boxes, GPMF-derived metadata, timecode metadata) | ✅ Complete | videodecoder_mp4.go, metadecoder_quicktime_gopro.go, videometa_golden_test.go |
