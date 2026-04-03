@@ -114,7 +114,7 @@ Public support claims in this README are backed by real video fixtures only.
 
 | Family | Current claim |
 |--------|---------------|
-| QuickTime/container-native metadata on committed fixtures and documented local Apple/Sony/Google/GoPro real fixtures | Validated |
+| QuickTime/container-native metadata on committed fixtures and documented local Apple/Sony/Google/GoPro/DJI real fixtures | Validated |
 | Vendor container metadata on committed fixtures (`Pentax/moov/udta/TAGS`, Sony UUID/NRTM, Apple MOV mdta, GoPro `udta`/GPMF) | Validated |
 | Additional embedded routes implemented in code and regression tests | Not promoted to README-level claims until real-fixture validation exists |
 

@@ -20,7 +20,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | D-12 | GPS coordinates | Decimal degrees float64 (matching exiftool -n) |
 | D-13 | Codec info | Extract codec fourcc + basic params via CONFIG source |
 | D-14 | Fragmented MP4 | Not supported in v1 (return error if detected) |
-| D-15 | Thumbnails/cover art | Out of scope for v1 |
+| D-15 | Thumbnails/cover art | No generated thumbnails or preview extraction; embedded metadata cover art stays in scope |
 | D-16 | Timestamp type | Go time.Time; preserve original timezone; GetDateTimeUTC() convenience |
 | D-17 | Partial reads | Best-effort mode — succeed if moov at start, return partial + error if not |
 | D-18 | XMP extensions | Main packet only (skip extended XMP) |
@@ -40,7 +40,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 - Read-only metadata extraction from MP4/MOV (ISOBMFF containers)
 - Pure Go, no CGo, no external binaries
 - v1: MP4/MOV only (AVI/MKV deferred)
-- No writing, no transcoding, no thumbnails (D-15), no fragmented MP4 (D-14)
+- No writing, no transcoding, no generated thumbnails/preview extraction (D-15), no fragmented MP4 (D-14)
 
 ---
 
@@ -54,7 +54,7 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-API-04 | `Options.VideoFormat` optional; auto-detect from ftyp if omitted | D-03, D-04 |
 | REQ-API-05 | `Source` bitmask: `EXIF \| IPTC \| XMP \| QUICKTIME \| VENDOR \| CONFIG \| COMPOSITE` | D-23 |
 | REQ-API-06 | `HandleTag` callback receives `TagInfo{Source, Tag, Namespace, Value}` | — |
-| REQ-API-07 | `ShouldHandleTag` filter, `LimitNumTags`, `LimitTagSize` | — |
+| REQ-API-07 | `ShouldHandleTag` filter, `LimitNumTags`, `LimitTagSize` (zero means no size cap) | — |
 | REQ-API-08 | `HandleXMP` escape hatch for custom XMP processing | — |
 | REQ-API-09 | `Warnf` callback for warnings | — |
 | REQ-API-10 | `Timeout` for decode operations | — |
@@ -171,8 +171,8 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-TEST-05 | Non-fast-start MP4 (moov at end) | FFmpeg with -movflags 0 | P1 |
 | REQ-TEST-06 | Android MP4 | Documented local Pixel 9 Pro clip (`testdata/google.mp4`) | P2 |
 | REQ-TEST-07 | GoPro MP4 | Public GoPro shared clip (`testdata/gopro_action.mp4`) | P2 |
-| REQ-TEST-08 | DJI drone MP4 | Source from device | P2 |
-| REQ-TEST-09 | Professional camera MOV | Canon/Sony/Panasonic | P2 |
+| REQ-TEST-08 | DJI drone MOV/MP4 | Documented local DJI Inspire 3 clip (`testdata/dji_inspire3_car_4k120_rec709.mov`) | P2 |
+| REQ-TEST-09 | Professional camera MOV | Documented local Sony A6700 and DJI Ronin 4D clips | P2 |
 | REQ-TEST-10 | MP4 with 64-bit box sizes | Crafted or >4GB file | P2 |
 
 ---
@@ -264,6 +264,6 @@ Status terms used below:
 | REQ-TEST-05 | ARCH-TEST-01 | testdata/nonfaststart.mp4 | videometa_golden_test.go | Validated |
 | REQ-TEST-06 | ARCH-TEST-01 | testdata/google.mp4 | videometa_fixture_test.go, videometa_golden_test.go | Validated |
 | REQ-TEST-07 | ARCH-TEST-01 | testdata/gopro_action.mp4 | videometa_fixture_test.go, videometa_golden_test.go | Validated |
-| REQ-TEST-08 | ARCH-TEST-01 | — | — | Pending |
-| REQ-TEST-09 | ARCH-TEST-01 | testdata/sony_a6700.mp4 | videometa_golden_test.go | Validated |
+| REQ-TEST-08 | ARCH-TEST-01 | testdata/dji_inspire3_car_4k120_rec709.mov | videometa_fixture_test.go, videometa_golden_test.go | Validated |
+| REQ-TEST-09 | ARCH-TEST-01 | testdata/sony_a6700.mp4, testdata/dji_ronin4d_4k_prores4444_25fps.mov | videometa_fixture_test.go, videometa_golden_test.go | Validated |
 | REQ-TEST-10 | ARCH-TEST-01 | — | — | Pending |

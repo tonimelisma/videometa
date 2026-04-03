@@ -123,7 +123,7 @@ type Options struct {
 	// LimitNumTags caps total tags delivered. Default 5000.
 	LimitNumTags uint32
 
-	// LimitTagSize caps individual tag value size in bytes. Default 10000.
+	// LimitTagSize caps individual tag value size in bytes. Zero means no limit.
 	LimitTagSize uint32
 }
 
@@ -176,9 +176,6 @@ func Decode(opts Options) (result DecodeResult, err error) {
 	}
 	if opts.LimitNumTags == 0 {
 		opts.LimitNumTags = 5000
-	}
-	if opts.LimitTagSize == 0 {
-		opts.LimitTagSize = 10000
 	}
 
 	// Wrap reader in streamReader.

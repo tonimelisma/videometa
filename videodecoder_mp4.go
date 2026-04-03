@@ -879,25 +879,152 @@ func (d *videoDecoderMP4) decodeVisualSampleEntry(entryStart int64, entrySize ui
 		d.emitQuickTimeTag("BitDepth", int(bitDepth))
 	}
 
-	// Parse sub-boxes within the sample entry (pasp, btrt, etc.).
 	entryEnd := boxEnd(entryStart, uint64(entrySize))
-	for d.pos()+8 <= entryEnd {
-		subStart := d.pos()
-		subSize, subType, isEOF := d.readBoxHeader()
-		if isEOF || subSize < 8 {
-			break
+	remaining := int(entryEnd - d.pos())
+	if remaining <= 0 {
+		return
+	}
+
+	// Match exiftool's ProcessHybrid behavior: only promote child atoms when the
+	// trailing bytes contain a clean atom chain. Some sample descriptions carry
+	// vendor tail bytes after the last child atom, and exiftool intentionally
+	// ignores those child boxes instead of partially parsing them.
+	tail := d.readBytes(remaining)
+	childOffset := findHybridChildAtomOffset(tail)
+	if childOffset < 0 {
+		return
+	}
+	d.decodeVisualSampleEntryChildren(tail[childOffset:])
+}
+
+func (d *videoDecoderMP4) decodeVisualSampleEntryChildren(data []byte) {
+	for pos := 0; pos+8 <= len(data); {
+		size := int(readBEUintN(data[pos : pos+4]))
+		if size < 8 || pos+size > len(data) {
+			return
 		}
 
-		switch subType.String() {
-		case "pasp":
-			d.decodePasp()
+		boxType := string(data[pos+4 : pos+8])
+		payload := data[pos+8 : pos+size]
+
+		switch boxType {
 		case "btrt":
-			d.decodeBtrt()
+			d.decodeBtrtBytes(payload)
 		case "colr":
-			d.decodeColr()
+			d.decodeColrBytes(payload)
+		case "fiel":
+			d.decodeFielBytes(payload)
+		case "pasp":
+			d.decodePaspBytes(payload)
 		}
 
-		d.seekToBoxEnd(subStart, subSize)
+		pos += size
+	}
+}
+
+func findHybridChildAtomOffset(data []byte) int {
+	end := len(data)
+	for pos := 0; pos <= end-8; pos++ {
+		try := pos
+		for try+8 <= end {
+			if !wellBehavedHybridTag(data[try+4 : try+8]) {
+				break
+			}
+			size := int(readBEUintN(data[try : try+4]))
+			if size+try == end {
+				return pos
+			}
+			if size < 8 || size+try > end-8 {
+				break
+			}
+			try += size
+		}
+	}
+	return -1
+}
+
+func wellBehavedHybridTag(tag []byte) bool {
+	if len(tag) != 4 {
+		return false
+	}
+	for _, b := range tag {
+		switch {
+		case b == ' ':
+		case b >= '0' && b <= '9':
+		case b >= 'A' && b <= 'Z':
+		case b == '_':
+		case b >= 'a' && b <= 'z':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func (d *videoDecoderMP4) decodeFielBytes(data []byte) {
+	if !d.opts.Sources.Has(QUICKTIME) || len(data) < 2 {
+		return
+	}
+
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/fiel"))
+	defer restore()
+
+	d.emitQuickTimeTag("VideoFieldOrder", fmt.Sprintf("%d %d", data[0], data[1]))
+}
+
+func (d *videoDecoderMP4) decodePaspBytes(data []byte) {
+	if !d.opts.Sources.Has(QUICKTIME) || len(data) < 8 {
+		return
+	}
+
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/pasp"))
+	defer restore()
+
+	hSpacing := readBEUintN(data[0:4])
+	vSpacing := readBEUintN(data[4:8])
+	d.emitQuickTimeTag("PixelAspectRatio", fmt.Sprintf("%d:%d", hSpacing, vSpacing))
+}
+
+func (d *videoDecoderMP4) decodeBtrtBytes(data []byte) {
+	if !d.opts.Sources.Has(QUICKTIME) || len(data) < 12 {
+		return
+	}
+
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/btrt"))
+	defer restore()
+
+	bufferSize := readBEUintN(data[0:4])
+	maxBitrate := readBEUintN(data[4:8])
+	avgBitrate := readBEUintN(data[8:12])
+
+	d.emitQuickTimeTag("BufferSize", bufferSize)
+	d.emitQuickTimeTag("MaxBitrate", maxBitrate)
+	d.emitQuickTimeTag("AverageBitrate", avgBitrate)
+}
+
+func (d *videoDecoderMP4) decodeColrBytes(data []byte) {
+	if !d.opts.Sources.Has(QUICKTIME) || len(data) < 10 {
+		return
+	}
+
+	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/colr"))
+	defer restore()
+
+	colorType := string(data[0:4])
+	if colorType != "nclx" && colorType != "nclc" {
+		return
+	}
+
+	colorPrimaries := readBEUintN(data[4:6])
+	transferCharacteristics := readBEUintN(data[6:8])
+	matrixCoefficients := readBEUintN(data[8:10])
+
+	d.emitQuickTimeTag("ColorProfiles", colorType)
+	d.emitQuickTimeTag("ColorPrimaries", int(colorPrimaries))
+	d.emitQuickTimeTag("TransferCharacteristics", int(transferCharacteristics))
+	d.emitQuickTimeTag("MatrixCoefficients", int(matrixCoefficients))
+	if colorType == "nclx" && len(data) >= 11 {
+		d.emitQuickTimeTag("VideoFullRangeFlag", int((data[10]>>7)&0x1))
 	}
 }
 
@@ -975,45 +1102,6 @@ func (d *videoDecoderMP4) decodeWave(waveStart int64, waveSize uint64) {
 		}
 		d.seekToBoxEnd(subStart, subSize)
 	}
-}
-
-// decodePasp parses the pixel aspect ratio box.
-func (d *videoDecoderMP4) decodePasp() {
-	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/pasp"))
-	defer restore()
-
-	hSpacing := d.read4()
-	vSpacing := d.read4()
-	if d.opts.Sources.Has(QUICKTIME) {
-		d.emitQuickTimeTag("PixelAspectRatio", fmt.Sprintf("%d:%d", hSpacing, vSpacing))
-	}
-}
-
-// decodeColr parses the color information box.
-// For nclx, emit the color profile and the numeric primaries/transfer/matrix
-// fields that exiftool reports for modern MP4/MOV video tracks.
-func (d *videoDecoderMP4) decodeColr() {
-	restore := d.withQuickTimeNamespace(d.trackNamespace("moov/trak/mdia/minf/stbl/stsd/colr"))
-	defer restore()
-
-	colorType := d.readFourCC().String()
-	if !d.opts.Sources.Has(QUICKTIME) {
-		return
-	}
-	if colorType != "nclx" {
-		return
-	}
-
-	d.emitQuickTimeTag("ColorProfiles", colorType)
-	colorPrimaries := d.read2()
-	transferCharacteristics := d.read2()
-	matrixCoefficients := d.read2()
-	fullRangeAndReserved := d.read1()
-
-	d.emitQuickTimeTag("ColorPrimaries", int(colorPrimaries))
-	d.emitQuickTimeTag("TransferCharacteristics", int(transferCharacteristics))
-	d.emitQuickTimeTag("MatrixCoefficients", int(matrixCoefficients))
-	d.emitQuickTimeTag("VideoFullRangeFlag", int((fullRangeAndReserved>>7)&0x1))
 }
 
 // decodeBtrt parses the bitrate box.

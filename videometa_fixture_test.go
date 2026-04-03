@@ -19,6 +19,18 @@ func TestLocalGoProFixtureAvailable(t *testing.T) {
 	assertLocalFixtureAvailable(c, "testdata/gopro_action.mp4")
 }
 
+// Validates: REQ-TEST-08
+func TestLocalDJIInspire3FixtureAvailable(t *testing.T) {
+	c := qt.New(t)
+	assertLocalFixtureAvailable(c, "testdata/dji_inspire3_car_4k120_rec709.mov")
+}
+
+// Validates: REQ-TEST-09
+func TestLocalDJIRonin4DFixtureAvailable(t *testing.T) {
+	c := qt.New(t)
+	assertLocalFixtureAvailable(c, "testdata/dji_ronin4d_4k_prores4444_25fps.mov")
+}
+
 // Validates: REQ-QT-04
 func TestGoogleMP4ColorProfileTags(t *testing.T) {
 	if _, err := os.Stat("testdata/google.mp4"); os.IsNotExist(err) {

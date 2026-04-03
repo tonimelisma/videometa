@@ -361,6 +361,26 @@ func TestGoldenGoProActionMP4(t *testing.T) {
 		[]string{"QuickTime", "Composite"})
 }
 
+// Validates: REQ-NF-04, REQ-QT-04, REQ-TEST-08
+func TestGoldenDJIInspire3MOV(t *testing.T) {
+	if _, err := os.Stat("testdata/dji_inspire3_car_4k120_rec709.mov"); os.IsNotExist(err) {
+		t.Skip("dji_inspire3_car_4k120_rec709.mov not available")
+	}
+	c := qt.New(t)
+	testGoldenExhaustive(c, "testdata/dji_inspire3_car_4k120_rec709.mov", "testdata/dji_inspire3_car_4k120_rec709.mov.exiftool.json",
+		[]string{"QuickTime", "Composite"})
+}
+
+// Validates: REQ-NF-04, REQ-QT-04, REQ-TEST-09
+func TestGoldenDJIRonin4DMOV(t *testing.T) {
+	if _, err := os.Stat("testdata/dji_ronin4d_4k_prores4444_25fps.mov"); os.IsNotExist(err) {
+		t.Skip("dji_ronin4d_4k_prores4444_25fps.mov not available")
+	}
+	c := qt.New(t)
+	testGoldenExhaustive(c, "testdata/dji_ronin4d_4k_prores4444_25fps.mov", "testdata/dji_ronin4d_4k_prores4444_25fps.mov.exiftool.json",
+		[]string{"QuickTime", "Composite"})
+}
+
 // --- Non-golden tests that use golden files ---
 
 // Validates: REQ-API-13
