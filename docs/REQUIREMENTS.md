@@ -28,6 +28,10 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | D-25 | Namespace contract | `Namespace` strings are stable route identities; QuickTime namespaces include 1-based track ordinals and vendor namespaces use `VendorName/route` |
 | D-26 | Namespace subviews | `SourceTags.Namespace(name)` returns a lossless `NamespaceTags` view; repeated tags stay queryable via `Find` |
 | D-27 | Embedded image metadata | Explicit non-goal; EXIF/TIFF, XMP/RDF, and IPTC-IIM payloads are not parsed even if carried inside video containers |
+| D-28 | Release cadence | Every merge to `main` is release-producing |
+| D-29 | Version source of truth | `VERSION` file |
+| D-30 | Release gate | Publish only after hosted CI restores the bootstrap-downloadable validated fixtures and passes on the exact `main` commit |
+| D-31 | Fixture enforcement | Bootstrap-downloadable real-fixture tests may skip by default in ordinary local development, but must fail hard when `VIDEOMETA_REQUIRE_LOCAL_FIXTURES=1` |
 
 ---
 
@@ -127,10 +131,13 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | REQ-NF-04 | Real-file golden validation uses both grouped `exiftool -n -json -g` output and duplicate-preserving ordered `exiftool -a -n -G0 -S` output | D-08 |
 | REQ-NF-05 | Fuzz tests for every supported decoder path | — |
 | REQ-NF-06 | No panics on malformed input; `InvalidFormatError` sentinel | — |
-| REQ-NF-07 | Go 1.24+ | — |
+| REQ-NF-07 | Go 1.25+ | — |
 | REQ-NF-08 | Zero runtime dependencies | D-01 |
 | REQ-NF-09 | MIT license | — |
-| REQ-NF-10 | CI runs exiftool-backed golden validation | D-08 |
+| REQ-NF-10 | Hosted CI runs format, lint, build, tests, coverage, release-guard checks, and exiftool-backed golden validation | D-08, D-28, D-29 |
+| REQ-NF-11 | Hosted CI restores the bootstrap-downloadable validated fixture corpus and fails hard when required bootstrap fixtures are missing in release mode | D-24, D-30, D-31 |
+| REQ-NF-12 | Pushes to `main` publish an annotated semver tag and GitHub Release from `VERSION` and `docs/releases/<VERSION>.md` only after hosted verification passes | D-28, D-29, D-30 |
+| REQ-NF-13 | `main` branch protection requires pull-request-based merges, up-to-date required checks, and conversation resolution before merge | D-28, D-30 |
 
 ---
 
@@ -139,14 +146,14 @@ Every requirement has a unique ID (`REQ-*`) for traceability to architecture (`A
 | ID | File | Source | Priority |
 |----|------|--------|----------|
 | REQ-TEST-01 | iPhone H.264 MP4 with GPS | committed real fixture (`testdata/with_gps.mp4`) | P0 |
-| REQ-TEST-02 | iPhone HEVC MOV | documented local real fixture (`testdata/apple.mov`) | P0 |
+| REQ-TEST-02 | iPhone HEVC MOV | committed real fixture (`testdata/IMG_5179.MOV`) | P0 |
 | REQ-TEST-03 | Minimal MP4 | committed synthetic fixture (`testdata/minimal.mp4`) | P1 |
 | REQ-TEST-04 | Malformed/corrupt MP4 regression inputs | crafted inline malformed byte sequences | P1 |
 | REQ-TEST-05 | Non-fast-start MP4 (`moov` at end) | committed synthetic fixture (`testdata/nonfaststart.mp4`) | P1 |
-| REQ-TEST-06 | Android MP4 | documented local Pixel 9 Pro clip (`testdata/google.mp4`) | P2 |
-| REQ-TEST-07 | GoPro MP4 | documented local GoPro HERO12 clip (`testdata/gopro_action.mp4`) | P2 |
-| REQ-TEST-08 | DJI drone/pro camera MOV | documented local DJI Inspire 3 clip (`testdata/dji_inspire3_car_4k120_rec709.mov`) | P2 |
-| REQ-TEST-09 | Professional camera MOV/MP4 | documented local Sony A6700 and DJI Ronin 4D clips | P2 |
+| REQ-TEST-06 | Android MP4 | committed real fixture (`testdata/google.mp4`) | P2 |
+| REQ-TEST-07 | GoPro MP4 | bootstrap-downloadable public GoPro HERO12 clip (`testdata/gopro_action.mp4`) | P2 |
+| REQ-TEST-08 | DJI drone/pro camera MOV | bootstrap-downloadable public DJI Inspire 3 clip (`testdata/dji_inspire3_car_4k120_rec709.mov`) | P2 |
+| REQ-TEST-09 | Professional camera MOV/MP4 | committed Sony A6700 clip plus bootstrap-downloadable DJI Ronin 4D clip | P2 |
 | REQ-TEST-10 | MP4 with 64-bit box sizes | crafted or >4GB fixture | P2 |
 
 ---
@@ -215,9 +222,12 @@ Status terms used below:
 | REQ-NF-07 | — | go.mod | — | Static |
 | REQ-NF-08 | ARCH-DEP-01 | go.mod | — | Static |
 | REQ-NF-09 | — | LICENSE | — | Static |
-| REQ-NF-10 | ARCH-TEST-05 | .github/workflows/ci.yml | — | Config |
+| REQ-NF-10 | ARCH-TEST-05 | .github/workflows/ci.yml, scripts/check-format.sh, scripts/check-release-guard.sh | — | Config |
+| REQ-NF-11 | ARCH-TEST-06 | .github/workflows/ci.yml, scripts/check-local-fixtures.sh, testhelpers_test.go | — | Config |
+| REQ-NF-12 | ARCH-REL-01 | VERSION, docs/releases/, .github/workflows/release.yml | — | Config |
+| REQ-NF-13 | ARCH-REL-02 | scripts/configure-branch-protection.sh | — | Config |
 | REQ-TEST-01 | ARCH-TEST-01 | testdata/with_gps.mp4 | videometa_golden_test.go | Validated |
-| REQ-TEST-02 | ARCH-TEST-01 | testdata/apple.mov | videometa_golden_test.go | Validated |
+| REQ-TEST-02 | ARCH-TEST-01 | testdata/IMG_5179.MOV | videometa_golden_test.go | Validated |
 | REQ-TEST-03 | ARCH-TEST-01 | testdata/minimal.mp4 | videometa_golden_test.go | Validated |
 | REQ-TEST-04 | ARCH-TEST-04 | inline malformed byte slices | videometa_test.go | Implemented |
 | REQ-TEST-05 | ARCH-TEST-01 | testdata/nonfaststart.mp4 | videometa_golden_test.go | Validated |

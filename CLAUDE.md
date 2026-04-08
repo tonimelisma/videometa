@@ -4,7 +4,7 @@ Go package for reading metadata from video files. Companion to [bep/imagemeta](h
 
 ## Status
 
-**v0.1.0.** Implemented decoders: ISOBMFF, QuickTime native, vendor metadata families (`Pentax/moov/udta/TAGS`, Sony UUID-PROF, Sony USMT/MTDT, Sony NRTM, GoPro `udta`/GPMF), Apple MOV (`mdta` locales, `wave`/`frma`), and Android `mdta`. The collected API is lossless and namespace-preserving (`Tags` -> `SourceTags` -> `NamespaceTags`). Real-file golden coverage is maintained for committed fixtures and documented local fixtures; synthetic tests remain regression coverage only and do not count as validated support claims.
+The current release version is recorded in `VERSION`. Implemented decoders: ISOBMFF, QuickTime native, vendor metadata families (`Pentax/moov/udta/TAGS`, Sony UUID-PROF, Sony USMT/MTDT, Sony NRTM, GoPro `udta`/GPMF), Apple MOV (`mdta` locales, `wave`/`frma`), and Android `mdta`. The collected API is lossless and namespace-preserving (`Tags` -> `SourceTags` -> `NamespaceTags`). Real-file golden coverage is maintained for committed fixtures plus bootstrap-downloadable validated fixtures; synthetic tests remain regression coverage only and do not count as validated support claims.
 
 **Explicit non-goal:** embedded image metadata payloads. If a video contains EXIF/TIFF, XMP/RDF, or IPTC-IIM payloads, `videometa` does not parse them.
 
@@ -81,6 +81,24 @@ Never buffer an entire file or even an entire box into memory. `mdat` can be gig
 
 `go generate ./gen` runs exiftool on test videos and produces grouped JSON plus ordered occurrence goldens in `testdata/`. Tests compare videometa output against those committed artifacts. CI reruns exiftool to catch drift. This is the primary correctness mechanism.
 
+### Release Strategy
+
+- `videometa` releases from `main` only.
+- Every merged increment must bump `VERSION` and add `docs/releases/<VERSION>.md`.
+- Pre-`v1.0.0` semver still has meaning:
+  - patch releases (`v0.x.y`) are for bug fixes, parity fixes, internal refactors, and docs/tests with no intentional public contract change
+  - minor releases (`v0.(x+1).0`) are for any exported API change, tag-name change, source/namespace change, support-policy change, or new validated metadata family
+- No silent merges to `main`: every merge is release-producing.
+- Release notes are mandatory and reviewed in the PR, not written after the fact.
+
+### Release CI
+
+- Hosted CI is required for every PR and every release.
+- Hosted CI restores the bootstrap-downloadable validated fixtures with `scripts/check-local-fixtures.sh` before running the hard gate.
+- Bootstrap-downloadable fixture tests may skip in ordinary local development, but they must fail hard when `VIDEOMETA_REQUIRE_LOCAL_FIXTURES=1`.
+- `push` to `main` reruns hosted verification, restores the bootstrap fixtures, then publishes the Git tag and GitHub Release from `VERSION` and `docs/releases/<VERSION>.md`.
+- There is no self-hosted runner or developer-machine background service in the release path.
+
 ### Fuzz Testing Mandate
 
 Every supported decoder path gets a fuzz target. The rule: no panics, no allocations > 10MB, `InvalidFormatError` for malformed container input.
@@ -91,19 +109,21 @@ ISOBMFF is always big-endian. Always use `streamReader`'s byte-order-aware metho
 
 ### Test Corpus Management
 
-Small committed fixtures stay in git. Large real-world test videos are **gitignored but live on disk** and must never be deleted, nor may their golden files or test functions be removed.
+Committed validated fixtures stay in git:
 
-**Large gitignored test files (DO NOT DELETE):**
+- `testdata/IMG_5179.MOV`
+- `testdata/google.mp4`
+- `testdata/sony_a6700.mp4`
+
+Bootstrap-downloadable validated fixtures remain gitignored but are restorable via `scripts/check-local-fixtures.sh`:
 
 | File | Size | Provenance | Golden JSON (committed) |
 |------|------|-----------|------------------------|
-| `testdata/apple.mov` | 110 MB | iPhone 15 Pro, HEVC | `apple.mov.exiftool.json` |
 | `testdata/gopro_action.mp4` | 67 MB | GoPro HERO12 Black public shared clip | `gopro_action.mp4.exiftool.json` |
-| `testdata/sony_a6700.mp4` | 67 MB | Sony A6700, XAVC | `sony_a6700.mp4.exiftool.json` |
 | `testdata/dji_inspire3_car_4k120_rec709.mov` | 561 MB | DJI Inspire 3 sample | `dji_inspire3_car_4k120_rec709.mov.exiftool.json` |
 | `testdata/dji_ronin4d_4k_prores4444_25fps.mov` | 1.19 GB | DJI Ronin 4D sample | `dji_ronin4d_4k_prores4444_25fps.mov.exiftool.json` |
 
-These files have conditional-skip golden tests that run when the file is present and skip gracefully in CI. When working in a worktree, copy them from the main repo. Never delete gitignored test files or their golden files. They are the user's data.
+These bootstrap fixtures skip only in ordinary local development. Hosted CI restores them into the checkout and runs the same tests with `VIDEOMETA_REQUIRE_LOCAL_FIXTURES=1`, which turns missing validated fixtures into a hard failure. Legacy local user data such as `testdata/apple.mov` may still exist on disk, but it is no longer part of the validated corpus and must not be deleted.
 
 ## Coding Conventions
 
@@ -158,7 +178,7 @@ Work is done in increments. Do not ask permission, do not skip steps.
 
 1. Create a worktree.
 2. Create a branch named `<type>/<task-name>`.
-3. Copy gitignored large test files into the worktree.
+3. Committed validated fixtures are already present in the worktree. If you need the bootstrap-downloadable validated fixtures, run `./scripts/check-local-fixtures.sh`.
 4. All changes go through PRs.
 
 ### Step 3: Develop with TDD
@@ -172,6 +192,7 @@ Mandatory:
 - Update architecture/requirements if behavior or constraints changed.
 - Update `docs/TASKS.md`.
 - Keep the traceability matrix current.
+- Bump `VERSION` and add `docs/releases/<VERSION>.md` for every release-producing increment.
 
 ### Step 5: Self-verify
 
@@ -192,6 +213,7 @@ After each increment, run through the entire checklist. If something fails, fix 
 5. [ ] Coverage: `go tool cover -func=/tmp/cover.out | grep total`
 6. [ ] Golden file validation: `go generate ./gen` produces no diff
 7. [ ] Docs updated: `CLAUDE.md`, `docs/`, `README.md` as needed
-8. [ ] Push and CI green: push branch, open PR, enable auto-merge, watch checks
-9. [ ] Cleanup: remove worktree, delete local branch, prune, and fast-forward root `main`
-10. [ ] Increment report: summarize changes, plan deviations, top-up recommendations, unfixed items
+8. [ ] Release metadata updated: `VERSION` bumped and `docs/releases/<VERSION>.md` added
+9. [ ] Push and CI green: push branch, open PR, enable auto-merge, watch checks
+10. [ ] Cleanup: remove worktree, delete local branch, prune, and fast-forward root `main`
+11. [ ] Increment report: summarize changes, plan deviations, top-up recommendations, unfixed items

@@ -43,7 +43,9 @@ Embedded image metadata payloads are intentionally not part of this pipeline. `v
 | ARCH-FILE-12 | `value.go` | Numeric tag-value coercion used by convenience APIs and golden comparisons | REQ-API-13, REQ-NF-04 |
 | ARCH-FILE-13 | `gen/main.go` | Golden file generator (grouped JSON + ordered occurrence goldens) | REQ-NF-04 |
 | ARCH-FILE-14 | `testdata/` | Test video files + grouped and ordered exiftool goldens | REQ-TEST-* |
-| ARCH-FILE-15 | `.github/workflows/ci.yml` | CI with exiftool-backed golden validation | REQ-NF-10 |
+| ARCH-FILE-15 | `.github/workflows/ci.yml` | Hosted CI with bootstrap restoration of validated downloadable fixtures | REQ-NF-10, REQ-NF-11 |
+| ARCH-FILE-16 | `.github/workflows/release.yml` | Release workflow that verifies `main`, tags the commit, and publishes the GitHub Release | REQ-NF-12 |
+| ARCH-FILE-17 | `VERSION`, `docs/releases/`, `scripts/check-*.sh`, `scripts/configure-branch-protection.sh` | Release metadata, reusable guard scripts, and branch-protection automation | REQ-NF-10..13 |
 
 ---
 
@@ -137,17 +139,27 @@ ISOBMFF parsing is always big-endian. Vendor sub-decoders parse their own payloa
 
 | ID | Design element | Traces to |
 |----|----------------|-----------|
-| ARCH-TEST-01 | `go generate ./gen` runs exiftool on committed/local real test videos and regenerates grouped JSON + ordered occurrence goldens for supported groups only | REQ-NF-04 |
+| ARCH-TEST-01 | `go generate ./gen` runs exiftool on an explicit allowlist of committed and bootstrap-downloadable validated fixtures and regenerates grouped JSON + ordered occurrence goldens for supported groups only | REQ-NF-04 |
 | ARCH-TEST-02 | Public validation compares videometa output against committed real-file grouped JSON goldens and duplicate-preserving ordered occurrence goldens | REQ-NF-04, REQ-VENDOR-04 |
 | ARCH-TEST-03 | Benchmarks and latency guards cover representative streaming-sensitive paths | REQ-NF-02, REQ-NF-03 |
 | ARCH-TEST-04 | Fuzz and malformed-input tests cover parser safety and robustness | REQ-NF-05, REQ-NF-06 |
-| ARCH-TEST-05 | CI reruns `go generate ./gen` and diffs the grouped and ordered goldens | REQ-NF-10 |
+| ARCH-TEST-05 | Hosted CI restores bootstrap-downloadable fixtures, reruns `go generate ./gen`, diffs grouped and ordered goldens, and blocks merges on format/lint/build/test/release-guard failures | REQ-NF-10 |
+| ARCH-TEST-06 | `scripts/check-local-fixtures.sh` verifies committed validated fixtures, restores public bootstrap fixtures into the current checkout, and supports hard-fail release mode via `VIDEOMETA_REQUIRE_LOCAL_FIXTURES=1` | REQ-NF-11 |
 
-Large local fixtures remain gitignored but are part of the real validation corpus when present.
+The validated real-fixture corpus is split between committed fixtures (`IMG_5179.MOV`, `google.mp4`, `sony_a6700.mp4`) and bootstrap-downloadable fixtures (`gopro_action.mp4`, `dji_inspire3_car_4k120_rec709.mov`, `dji_ronin4d_4k_prores4444_25fps.mov`). Hosted CI restores the downloadable subset before running the hard gate.
 
 ---
 
-## 8. Dependencies (`ARCH-DEP-*`)
+## 8. Release Architecture (`ARCH-REL-*`)
+
+| ID | Design element | Traces to |
+|----|----------------|-----------|
+| ARCH-REL-01 | `VERSION` is the single release-version source of truth, `docs/releases/<VERSION>.md` is the reviewed release body, and `release.yml` tags/publishes only after hosted verification restores the validated fixture corpus and succeeds on the merge commit | REQ-NF-12 |
+| ARCH-REL-02 | `main` branch protection requires `release-guard` and `hosted-verify` plus conversation resolution before merge; `scripts/configure-branch-protection.sh` makes that policy reproducible | REQ-NF-13 |
+
+---
+
+## 9. Dependencies (`ARCH-DEP-*`)
 
 | ID | Dependency | Type | Purpose | Traces to |
 |----|------------|------|---------|-----------|

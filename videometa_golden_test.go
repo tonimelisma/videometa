@@ -323,61 +323,46 @@ func TestGoldenNonfaststart(t *testing.T) {
 
 // Validates: REQ-NF-04, REQ-VENDOR-04, REQ-TEST-09
 func TestGoldenSonyA6700(t *testing.T) {
-	if _, err := os.Stat("testdata/sony_a6700.mp4"); os.IsNotExist(err) {
-		t.Skip("sony_a6700.mp4 not available")
-	}
 	c := qt.New(t)
-	testGoldenExhaustive(c, "testdata/sony_a6700.mp4", "testdata/sony_a6700.mp4.exiftool.json",
+	testGoldenExhaustive(c, committedSonyFixture, committedSonyFixture+".exiftool.json",
 		[]string{"QuickTime", "XML", "Composite"})
 }
 
 // Validates: REQ-NF-04, REQ-TEST-02
 func TestGoldenAppleMOV(t *testing.T) {
-	if _, err := os.Stat("testdata/apple.mov"); os.IsNotExist(err) {
-		t.Skip("apple.mov not available")
-	}
 	c := qt.New(t)
-	testGoldenExhaustive(c, "testdata/apple.mov", "testdata/apple.mov.exiftool.json",
+	testGoldenExhaustive(c, committedAppleFixture, committedAppleFixture+".exiftool.json",
 		[]string{"QuickTime", "Composite"})
 }
 
 // Validates: REQ-NF-04, REQ-QT-03, REQ-QT-04, REQ-TEST-06
 func TestGoldenGoogleMP4(t *testing.T) {
-	if _, err := os.Stat("testdata/google.mp4"); os.IsNotExist(err) {
-		t.Skip("google.mp4 not available")
-	}
 	c := qt.New(t)
-	testGoldenExhaustive(c, "testdata/google.mp4", "testdata/google.mp4.exiftool.json",
+	testGoldenExhaustive(c, committedGoogleFixture, committedGoogleFixture+".exiftool.json",
 		[]string{"QuickTime", "Composite"})
 }
 
 // Validates: REQ-NF-04, REQ-VENDOR-04, REQ-TEST-07
 func TestGoldenGoProActionMP4(t *testing.T) {
-	if _, err := os.Stat("testdata/gopro_action.mp4"); os.IsNotExist(err) {
-		t.Skip("gopro_action.mp4 not available")
-	}
+	requireBootstrappedFixture(t, bootstrappedGoProFixture)
 	c := qt.New(t)
-	testGoldenExhaustive(c, "testdata/gopro_action.mp4", "testdata/gopro_action.mp4.exiftool.json",
+	testGoldenExhaustive(c, bootstrappedGoProFixture, bootstrappedGoProFixture+".exiftool.json",
 		[]string{"QuickTime", "Composite"})
 }
 
 // Validates: REQ-NF-04, REQ-VENDOR-04, REQ-TEST-08
 func TestGoldenDJIInspire3MOV(t *testing.T) {
-	if _, err := os.Stat("testdata/dji_inspire3_car_4k120_rec709.mov"); os.IsNotExist(err) {
-		t.Skip("dji_inspire3_car_4k120_rec709.mov not available")
-	}
+	requireBootstrappedFixture(t, bootstrappedDJIInspireFixture)
 	c := qt.New(t)
-	testGoldenExhaustive(c, "testdata/dji_inspire3_car_4k120_rec709.mov", "testdata/dji_inspire3_car_4k120_rec709.mov.exiftool.json",
+	testGoldenExhaustive(c, bootstrappedDJIInspireFixture, bootstrappedDJIInspireFixture+".exiftool.json",
 		[]string{"QuickTime", "Composite"})
 }
 
 // Validates: REQ-NF-04, REQ-VENDOR-04, REQ-TEST-09
 func TestGoldenDJIRonin4DMOV(t *testing.T) {
-	if _, err := os.Stat("testdata/dji_ronin4d_4k_prores4444_25fps.mov"); os.IsNotExist(err) {
-		t.Skip("dji_ronin4d_4k_prores4444_25fps.mov not available")
-	}
+	requireBootstrappedFixture(t, bootstrappedDJIRoninFixture)
 	c := qt.New(t)
-	testGoldenExhaustive(c, "testdata/dji_ronin4d_4k_prores4444_25fps.mov", "testdata/dji_ronin4d_4k_prores4444_25fps.mov.exiftool.json",
+	testGoldenExhaustive(c, bootstrappedDJIRoninFixture, bootstrappedDJIRoninFixture+".exiftool.json",
 		[]string{"QuickTime", "Composite"})
 }
 

@@ -255,6 +255,8 @@ cat <<'EOF'
 
 Bootstrap complete.
 
-These downloads are local-only fixtures. They are gitignored on purpose.
+These downloads are bootstrap-downloadable validated fixtures. They are
+gitignored on purpose, but hosted CI and local release verification rely on
+them being restorable from this script.
 For the remaining manual-only fixtures, see docs/FIXTURE_ACQUISITION.md.
 EOF

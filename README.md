@@ -126,14 +126,22 @@ Public support claims in this README are backed by real video fixtures only.
 
 | Family | Current claim |
 |--------|---------------|
-| QuickTime/container-native metadata on committed fixtures and documented local Apple/Sony/Google/GoPro/DJI real fixtures | Validated |
+| QuickTime/container-native metadata on committed fixtures plus bootstrap-downloadable GoPro/DJI real fixtures | Validated |
 | Vendor container metadata on committed fixtures (`Pentax/moov/udta/TAGS`, Sony UUID/NRTM, GoPro `udta`/GPMF) | Validated |
 | Additional video-native routes implemented in code but lacking real-fixture evidence | Not promoted to README-level claims until validated |
 | Embedded image metadata routes | Explicit non-goal |
 
 ## Status
 
-v0.1.0 development snapshot: ISOBMFF box parser, QuickTime/container-native metadata, vendor metadata families (Pentax `TAGS`, Sony UUID-PROF, Sony USMT/MTDT, Sony NRTM, GoPro `udta`/GPMF), Apple MOV metadata, Android `mdta` metadata, and codec/config extraction are implemented. Validation status is real-file-only; synthetic tests remain regression coverage only and do not justify support claims.
+The current release version is recorded in [`VERSION`](VERSION). `videometa` currently implements the ISOBMFF box parser, QuickTime/container-native metadata, vendor metadata families (Pentax `TAGS`, Sony UUID-PROF, Sony USMT/MTDT, Sony NRTM, GoPro `udta`/GPMF), Apple MOV metadata, Android `mdta` metadata, and codec/config extraction. Validation status is real-file-only: Apple, Google, and Sony fixtures are committed in the repo, while GoPro and DJI fixtures are restored by the bootstrap workflow. Synthetic tests remain regression coverage only and do not justify support claims.
+
+## Release Policy
+
+Every merged increment is release-producing.
+
+- `VERSION` is the single source of truth for the next module tag.
+- Every PR must bump `VERSION` and add `docs/releases/<VERSION>.md`.
+- Releases are cut from `main` only after hosted CI restores the bootstrap-downloadable validated fixtures and passes on the exact merge commit.
 
 ## Compatibility Policy
 

@@ -5,7 +5,8 @@ This document tracks the local real-video fixtures already in use plus the remai
 The rules are:
 
 - Real validation fixtures must be original `.mp4` or `.mov` files.
-- Local-only large fixtures stay in `testdata/` and are gitignored.
+- Committed validated fixtures stay in git when they are publishable and repo-sized.
+- Bootstrap-downloadable validated fixtures stay in `testdata/` and are gitignored.
 - Synthetic or generated media can exist for parser regression tests, but they do not count as validation evidence.
 - Do not transcode, rewrap, or export through photo/video apps before copying the file into `testdata/`.
 - Because embedded image metadata is an explicit non-goal, we do **not** track fixtures whose only purpose is EXIF/XMP/IPTC-in-video validation.
@@ -26,16 +27,24 @@ Today that means:
 - `testdata/dji_inspire3_car_4k120_rec709.mov`
 - `testdata/dji_ronin4d_4k_prores4444_25fps.mov`
 
+If you need the full validated corpus in a checkout, use:
+
+```bash
+./scripts/check-local-fixtures.sh
+```
+
+That script verifies the committed validated fixtures, bootstraps the downloadable fixtures, and hard-fails if the required release corpus is still incomplete.
+
 ## Acquired Local Fixtures
 
 | Local filename | Why it matters | Acquisition mode | Current source |
 |---|---|---|---|
-| `testdata/google.mp4` | Android phone clip with real smartphone metadata and GPS behavior | Manual local file already present | Pixel 9 Pro original recording |
+| `testdata/IMG_5179.MOV` | Apple / iPhone MOV fixture | Committed in repo | iPhone 15 Pro original recording |
+| `testdata/google.mp4` | Android phone clip with real smartphone metadata and GPS behavior | Committed in repo | Pixel 9 Pro original recording |
 | `testdata/gopro_action.mp4` | GoPro action-camera clip with real GoPro metadata | Scriptable now | [GoPro share page](https://gopro.com/v/8GodrO3G8bNK4) |
 | `testdata/dji_inspire3_car_4k120_rec709.mov` | DJI drone fixture | Scriptable now, downloaded locally | [DJI Inspire 3 Samples](https://www.dji.com/inspire-3/samples) |
 | `testdata/dji_ronin4d_4k_prores4444_25fps.mov` | Professional camera fixture beyond the existing Sony A6700 sample | Scriptable now, downloaded locally | [DJI Ronin 4D Samples](https://www.dji.com/ronin-4d/samples) |
-| `testdata/apple.mov` | Apple / iPhone MOV fixture | Manual local file already present | iPhone 15 Pro original recording |
-| `testdata/sony_a6700.mp4` | Sony professional-camera fixture | Manual local file already present | Sony A6700 original recording |
+| `testdata/sony_a6700.mp4` | Sony professional-camera fixture | Committed in repo | Sony A6700 original recording |
 
 ## Remaining Fixture Gaps
 
@@ -90,7 +99,7 @@ Recommended acquisition:
 ## After Downloading or Copying a Fixture
 
 1. Place the original file at the exact target path in `testdata/`.
-2. Confirm it remains gitignored with `git status --short`.
+2. If the fixture is intended to be committed, add it to git. If it is intended to remain bootstrap-only, confirm it stays gitignored with `git status --short`.
 3. Inspect the file with:
 
    ```bash
@@ -103,7 +112,9 @@ Recommended acquisition:
    go generate ./gen
    ```
 
-5. Add or update the corresponding conditional-skip golden test.
+5. Add or update the corresponding golden test. Use conditional skips only for bootstrap-downloadable fixtures.
+
+For release CI, also make sure the fixture participates in `scripts/check-local-fixtures.sh` so hosted verification restores or enforces it instead of skipping it.
 
 ## Extending the Bootstrap Script
 

@@ -3,8 +3,22 @@ package videometa
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
+	"os"
 	"time"
+)
+
+const requireLocalFixturesEnv = "VIDEOMETA_REQUIRE_LOCAL_FIXTURES"
+
+const (
+	committedAppleFixture  = "testdata/IMG_5179.MOV"
+	committedGoogleFixture = "testdata/google.mp4"
+	committedSonyFixture   = "testdata/sony_a6700.mp4"
+
+	bootstrappedGoProFixture      = "testdata/gopro_action.mp4"
+	bootstrappedDJIInspireFixture = "testdata/dji_inspire3_car_4k120_rec709.mov"
+	bootstrappedDJIRoninFixture   = "testdata/dji_ronin4d_4k_prores4444_25fps.mov"
 )
 
 // readerSeekerFromBytes creates an io.ReadSeeker from a byte slice.
@@ -45,6 +59,43 @@ func firstTagInNamespace(sourceTags SourceTags, namespace string, tag string) (T
 		return TagInfo{}, false
 	}
 	return matches[0], true
+}
+
+func requireBootstrappedFixture(t interface {
+	Helper()
+	Fatalf(format string, args ...any)
+	Skip(args ...any)
+}, mediaPath string,
+) string {
+	t.Helper()
+
+	if _, err := os.Stat(mediaPath); err == nil {
+		return mediaPath
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat bootstrap fixture %s: %v", mediaPath, err)
+	}
+
+	if os.Getenv(requireLocalFixturesEnv) == "1" {
+		t.Fatalf("%s not available; run scripts/check-local-fixtures.sh to restore the bootstrap-downloadable validated fixtures", mediaPath)
+	}
+
+	t.Skip(fmt.Sprintf("%s not available; bootstrap-downloadable fixture validation is optional unless %s=1", mediaPath, requireLocalFixturesEnv))
+	return ""
+}
+
+func openBootstrappedFixture(t interface {
+	Helper()
+	Fatalf(format string, args ...any)
+	Skip(args ...any)
+}, mediaPath string,
+) *os.File {
+	t.Helper()
+
+	f, err := os.Open(requireBootstrappedFixture(t, mediaPath))
+	if err != nil {
+		t.Fatalf("open bootstrap fixture %s: %v", mediaPath, err)
+	}
+	return f
 }
 
 func buildMP4WithSonyNRTMIDAT(payload []byte) []byte {

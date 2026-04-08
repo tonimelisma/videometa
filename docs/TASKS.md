@@ -11,9 +11,10 @@ Tasks organized by milestone. This file tracks the current product direction, no
 | M3: Vendor Container Metadata | ✅ Complete |
 | M4: Lossless Public API | ✅ Complete |
 | M5: Real-File Golden Validation | ✅ Complete |
-| M6: Fixture Bootstrap + Large Local Corpus | ✅ Complete |
+| M6: Fixture Bootstrap + Validated Fixture Corpus | ✅ Complete |
 | M7: Video-Native Scope Reset | ✅ Complete |
 | M8: Utility Module Refactor | ✅ Complete |
+| M9: Release Automation + Hard Gates | ✅ Complete |
 | BL: Remaining Real-Video Fixtures | In progress |
 
 ---
@@ -68,9 +69,9 @@ Tasks organized by milestone. This file tracks the current product direction, no
 
 | Task | Description | Status | Files |
 |------|-------------|--------|-------|
-| TASK-M6-01 | Add manifest-driven bootstrap for public/local-only fixtures | ✅ Complete | scripts/bootstrap-fixtures.sh, scripts/fixture_bootstrap.tsv |
-| TASK-M6-02 | Validate Apple, Sony, Google, GoPro, and DJI real fixtures | ✅ Complete | testdata/, videometa_fixture_test.go, videometa_golden_test.go |
-| TASK-M6-03 | Document acquisition and gitignored local-fixture workflow | ✅ Complete | docs/FIXTURE_ACQUISITION.md, CLAUDE.md |
+| TASK-M6-01 | Add manifest-driven bootstrap for public downloadable fixtures | ✅ Complete | scripts/bootstrap-fixtures.sh, scripts/fixture_bootstrap.tsv |
+| TASK-M6-02 | Validate committed Apple/Sony/Google fixtures plus bootstrap GoPro/DJI fixtures | ✅ Complete | testdata/, videometa_fixture_test.go, videometa_golden_test.go |
+| TASK-M6-03 | Document committed-vs-bootstrap fixture workflow | ✅ Complete | docs/FIXTURE_ACQUISITION.md, CLAUDE.md |
 
 ## Milestone 7: Video-Native Scope Reset
 
@@ -92,6 +93,16 @@ Refocus the package on video-native metadata only.
 | TASK-M8-03 | Fix Sony vendor convenience fallbacks for `CreationDateValue` and name/value GPS pairs | ✅ Complete | videometa.go, gps.go, videometa_test.go |
 | TASK-M8-04 | Update architecture, requirements, and maintainer docs to point at the new utility modules | ✅ Complete | docs/, CLAUDE.md |
 
+## Milestone 9: Release Automation + Hard Gates
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| TASK-M9-01 | Add `VERSION` and per-release notes under `docs/releases/` | ✅ Complete | VERSION, docs/releases/ |
+| TASK-M9-02 | Add hosted release-guard checks for version bump, release notes, format, lint, build, tests, coverage, and golden drift | ✅ Complete | .github/workflows/ci.yml, scripts/check-format.sh, scripts/check-release-guard.sh |
+| TASK-M9-03 | Centralize validated-fixture gating and make hosted CI restore bootstrap fixtures with hard-fail release mode | ✅ Complete | testhelpers_test.go, .github/workflows/ci.yml, scripts/check-local-fixtures.sh |
+| TASK-M9-04 | Add `main` release workflow that tags from `VERSION` and publishes GitHub Releases from reviewed notes | ✅ Complete | .github/workflows/release.yml |
+| TASK-M9-05 | Document and script branch-protection / release policy so release-on-merge is enforceable, not aspirational | ✅ Complete | CLAUDE.md, docs/ARCHITECTURE.md, docs/REQUIREMENTS.md, scripts/configure-branch-protection.sh |
+
 ---
 
 ## Backlog: Remaining Real-Video Fixtures
@@ -106,3 +117,4 @@ Refocus the package on video-native metadata only.
 
 - Embedded image metadata support was deliberately removed before 1.0. Historical EXIF/XMP/IPTC experiments are not part of the current product direction.
 - Synthetic media remains acceptable for malformed-input and parser-hardening regressions, but not for README-level support claims.
+- Release automation is hosted-only. Committed fixtures live in git, bootstrap fixtures are restored in CI, and no developer-machine service participates in the release path.
