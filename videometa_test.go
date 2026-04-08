@@ -210,6 +210,26 @@ func TestTagsGetDateTime(t *testing.T) {
 	c.Assert(dt.Second(), qt.Equals, 0)
 }
 
+// Validates: REQ-API-11, REQ-VENDOR-01
+func TestTagsGetDateTimeVendorCreationDateValue(t *testing.T) {
+	c := qt.New(t)
+
+	var tags Tags
+	tags.Add(TagInfo{
+		Source:    VENDOR,
+		Namespace: "Sony/meta/nrtm",
+		Tag:       "CreationDateValue",
+		Value:     "2026-03-18T16:39:46-0700",
+	})
+
+	dt, err := tags.GetDateTime()
+	c.Assert(err, qt.IsNil)
+	c.Assert(dt.Year(), qt.Equals, 2026)
+	c.Assert(dt.Month(), qt.Equals, time.March)
+	c.Assert(dt.Day(), qt.Equals, 18)
+	c.Assert(dt.Hour(), qt.Equals, 16)
+}
+
 // Validates: REQ-API-12
 func TestTagsGetDateTimeUTC(t *testing.T) {
 	c := qt.New(t)
@@ -788,6 +808,27 @@ func TestTagsGetLatLongQuickTime(t *testing.T) {
 	c.Assert(math.Abs(lon-(-118.446)) < 0.001, qt.IsTrue, qt.Commentf("lon=%f", lon))
 }
 
+// Validates: REQ-API-13, REQ-VENDOR-01
+func TestTagsGetLatLongVendorSonyNamedGPS(t *testing.T) {
+	c := qt.New(t)
+
+	var tags Tags
+	namespace := "Sony/meta/nrtm"
+	tags.Add(TagInfo{Source: VENDOR, Namespace: namespace, Tag: "AcquisitionRecordGroupItemName", Value: "LatitudeRef"})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: namespace, Tag: "AcquisitionRecordGroupItemValue", Value: "N"})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: namespace, Tag: "AcquisitionRecordGroupItemName", Value: "Latitude"})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: namespace, Tag: "AcquisitionRecordGroupItemValue", Value: "29;19;10.922"})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: namespace, Tag: "AcquisitionRecordGroupItemName", Value: "LongitudeRef"})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: namespace, Tag: "AcquisitionRecordGroupItemValue", Value: "W"})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: namespace, Tag: "AcquisitionRecordGroupItemName", Value: "Longitude"})
+	tags.Add(TagInfo{Source: VENDOR, Namespace: namespace, Tag: "AcquisitionRecordGroupItemValue", Value: "103;36;36.925"})
+
+	lat, lon, err := tags.GetLatLong()
+	c.Assert(err, qt.IsNil)
+	c.Assert(math.Abs(lat-(29+19.0/60+10.922/3600)) < 0.000001, qt.IsTrue, qt.Commentf("lat=%f", lat))
+	c.Assert(math.Abs(lon-(-(103+36.0/60+36.925/3600))) < 0.000001, qt.IsTrue, qt.Commentf("lon=%f", lon))
+}
+
 // Validates: REQ-API-13
 func TestTagsGetLatLongNoGPS(t *testing.T) {
 	c := qt.New(t)
@@ -909,7 +950,8 @@ func TestQuickTimeCreationDateTimezone(t *testing.T) {
 
 	matches := tags.QuickTime().Find("CreationDate")
 	c.Assert(len(matches) > 0, qt.IsTrue)
-	cdStr := toString(matches[len(matches)-1].Value)
+	cdStr, ok := matches[len(matches)-1].Value.(string)
+	c.Assert(ok, qt.IsTrue)
 	c.Assert(cdStr, qt.Contains, "-07:00",
 		qt.Commentf("CreationDate should preserve timezone, got %q", cdStr))
 }

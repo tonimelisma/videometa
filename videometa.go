@@ -427,12 +427,87 @@ func firstTagValue(sourceTags SourceTags, keys ...string) (any, bool) {
 func firstNumericValue(sources []SourceTags, keys ...string) (float64, bool) {
 	for _, sourceTags := range sources {
 		if tag, found := firstTagInfo(sourceTags, keys...); found {
-			if value, ok := toFloat64(tag.Value); ok {
+			if value, ok := coerceNumericTagValue(tag.Value); ok {
 				return value, true
 			}
 		}
 	}
 	return 0, false
+}
+
+func vendorNumericGPS(sourceTags SourceTags) (lat, lon float64, ok bool) {
+	for _, namespace := range sourceTags.Namespaces() {
+		ns := sourceTags.Namespace(namespace)
+		latTags := ns.Find("GPSLatitude")
+		if len(latTags) == 0 {
+			latTags = ns.Find("Latitude")
+		}
+		lonTags := ns.Find("GPSLongitude")
+		if len(lonTags) == 0 {
+			lonTags = ns.Find("Longitude")
+		}
+		if len(latTags) == 0 || len(lonTags) == 0 {
+			continue
+		}
+		latValue, latOK := coerceNumericTagValue(latTags[0].Value)
+		lonValue, lonOK := coerceNumericTagValue(lonTags[0].Value)
+		if latOK && lonOK {
+			return latValue, lonValue, true
+		}
+	}
+	return 0, 0, false
+}
+
+func vendorNamedGPS(sourceTags SourceTags) (lat, lon float64, ok bool) {
+	for _, namespace := range sourceTags.Namespaces() {
+		ns := sourceTags.Namespace(namespace)
+		names := ns.Find("AcquisitionRecordGroupItemName")
+		values := ns.Find("AcquisitionRecordGroupItemValue")
+		if len(names) == 0 || len(values) == 0 {
+			continue
+		}
+
+		pairs := len(names)
+		if len(values) < pairs {
+			pairs = len(values)
+		}
+
+		var latValue, latRef, lonValue, lonRef string
+		for i := 0; i < pairs; i++ {
+			name, ok := names[i].Value.(string)
+			if !ok {
+				continue
+			}
+			value, ok := values[i].Value.(string)
+			if !ok {
+				continue
+			}
+			switch name {
+			case "Latitude":
+				latValue = value
+			case "LatitudeRef":
+				latRef = value
+			case "Longitude":
+				lonValue = value
+			case "LongitudeRef":
+				lonRef = value
+			}
+		}
+		if latValue == "" || latRef == "" || lonValue == "" || lonRef == "" {
+			continue
+		}
+
+		latParsed, err := parseVideoRefCoordinate(latValue, latRef)
+		if err != nil {
+			continue
+		}
+		lonParsed, err := parseVideoRefCoordinate(lonValue, lonRef)
+		if err != nil {
+			continue
+		}
+		return latParsed, lonParsed, true
+	}
+	return 0, 0, false
 }
 
 // GetDateTime returns the best available creation time with original timezone.
@@ -444,12 +519,12 @@ func (t Tags) GetDateTime() (time.Time, error) {
 		keys   []string
 	}{
 		{source: t.QuickTime(), keys: []string{"CreationDate", "CreateDate", "ModifyDate"}},
-		{source: t.Vendor(), keys: []string{"CreationDate", "CreateDate", "ModifyDate", "DateTimeOriginal"}},
+		{source: t.Vendor(), keys: []string{"CreationDate", "CreationDateValue", "CreateDate", "ModifyDate", "DateTimeOriginal"}},
 	}
 
 	for _, candidate := range candidates {
 		if tag, found := firstTagInfo(candidate.source, candidate.keys...); found {
-			if dt, err := parseAnyDateTime(tag.Value); err == nil {
+			if dt, err := parseVideoMetadataTimeValue(tag.Value); err == nil {
 				return dt, nil
 			}
 		}
@@ -473,20 +548,18 @@ func (t Tags) GetLatLong() (lat, lon float64, err error) {
 	// Try QuickTime GPS (space-separated decimal or ISO6709).
 	if gpsTag, found := firstTagInfo(t.QuickTime(), "GPSCoordinates"); found {
 		if s, ok := gpsTag.Value.(string); ok {
-			if lat, lon, err := parseGPSCoordinatesString(s); err == nil {
+			if lat, lon, err := parseVideoGPSCoordinates(s); err == nil {
 				return lat, lon, nil
 			}
 		}
 	}
 
-	if latTag, found := firstTagInfo(t.Vendor(), "GPSLatitude", "Latitude"); found {
-		if lonTag, found := firstTagInfo(t.Vendor(), "GPSLongitude", "Longitude"); found {
-			if latVal, ok := toFloat64(latTag.Value); ok {
-				if lonVal, ok := toFloat64(lonTag.Value); ok {
-					return latVal, lonVal, nil
-				}
-			}
-		}
+	if lat, lon, ok := vendorNumericGPS(t.Vendor()); ok {
+		return lat, lon, nil
+	}
+
+	if lat, lon, ok := vendorNamedGPS(t.Vendor()); ok {
+		return lat, lon, nil
 	}
 
 	return 0, 0, fmt.Errorf("videometa: no GPS coordinates found")
@@ -602,8 +675,8 @@ func computeComposite(tags *Tags, config VideoConfig) {
 	// AvgBitrate: MediaDataSize * 8 / Duration.
 	if mdSize, found := firstTagInfo(tags.QuickTime(), "MediaDataSize"); found {
 		if dur, found := firstTagInfo(tags.QuickTime(), "Duration"); found {
-			if sizeF, ok := toFloat64(mdSize.Value); ok {
-				if durF, ok := toFloat64(dur.Value); ok && durF > 0 {
+			if sizeF, ok := coerceNumericTagValue(mdSize.Value); ok {
+				if durF, ok := coerceNumericTagValue(dur.Value); ok && durF > 0 {
 					add("AvgBitrate", int(math.Round(sizeF*8/durF)))
 				}
 			}
@@ -613,8 +686,8 @@ func computeComposite(tags *Tags, config VideoConfig) {
 	// GPS decomposition from QuickTime GPSCoordinates (space-separated decimal).
 	if gpsTag, found := firstTagInfo(tags.QuickTime(), "GPSCoordinates"); found {
 		if s, ok := gpsTag.Value.(string); ok {
-			lat, lon, err := parseGPSCoordinatesString(s)
-			alt, altOK := parseGPSAltitudeFromString(s)
+			lat, lon, err := parseVideoGPSCoordinates(s)
+			alt, altOK := parseVideoGPSAltitude(s)
 			if altOK {
 				ref := 0
 				if alt < 0 {

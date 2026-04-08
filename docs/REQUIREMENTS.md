@@ -172,7 +172,7 @@ Status terms used below:
 | REQ-API-10 | ARCH-ERR-04 | videometa.go | videometa_test.go | Validated |
 | REQ-API-11 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
 | REQ-API-12 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
-| REQ-API-13 | ARCH-FLOW-01 | videometa.go, helpers.go | videometa_test.go, videometa_golden_test.go | Validated |
+| REQ-API-13 | ARCH-FLOW-01 | videometa.go, gps.go, value.go | videometa_test.go, gps_test.go, videometa_golden_test.go | Validated |
 | REQ-API-14 | ARCH-FLOW-01 | videometa.go | videometa_test.go | Validated |
 | REQ-API-15 | ARCH-ERR-02 | videometa.go | videometa_test.go | Validated |
 | REQ-API-16 | ARCH-DEC-03 | videometa.go | videometa_test.go | Validated |
@@ -195,7 +195,7 @@ Status terms used below:
 | REQ-QT-03 | ARCH-DEC-01 | metadecoder_quicktime.go | metadecoder_quicktime_test.go, videometa_golden_test.go | Validated |
 | REQ-QT-04 | ARCH-DEC-01, ARCH-BOX-04 | metadecoder_quicktime.go, videodecoder_mp4.go | videometa_golden_test.go, videometa_fixture_test.go | Validated |
 | REQ-QT-05 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
-| REQ-QT-06 | ARCH-DEC-04 | helpers.go | helpers_test.go, videometa_golden_test.go | Validated |
+| REQ-QT-06 | ARCH-DEC-04 | gps.go | gps_test.go, videometa_golden_test.go | Validated |
 | REQ-QT-07 | ARCH-DEC-01 | metadecoder_quicktime.go | videometa_golden_test.go | Validated |
 | REQ-QT-08 | ARCH-DEC-01 | metadecoder_quicktime.go | videometa_test.go | Validated |
 | REQ-VENDOR-01 | ARCH-DEC-02 | metadecoder_quicktime_pentax.go, metadecoder_sony_nrtm.go, metadecoder_quicktime_gopro.go, videodecoder_mp4.go | videometa_test.go | Validated |
@@ -204,14 +204,14 @@ Status terms used below:
 | REQ-VENDOR-04 | ARCH-TEST-02 | metadecoder_quicktime_pentax.go, metadecoder_sony_nrtm.go, metadecoder_quicktime_gopro.go, videodecoder_mp4.go | videometa_golden_test.go | Validated |
 | REQ-CFG-01 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
 | REQ-CFG-02 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go | Validated |
-| REQ-CFG-03 | ARCH-BOX-04 | videodecoder_mp4.go, helpers.go | videometa_test.go, helpers_test.go | Validated |
+| REQ-CFG-03 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go, quicktime_matrix_test.go | Validated |
 | REQ-CFG-04 | ARCH-BOX-04 | videodecoder_mp4.go | videometa_test.go, videometa_fixture_test.go | Validated |
 | REQ-NF-01 | ARCH-IO-01 | io.go | io_test.go, videometa_alloc_test.go, videometa_sony_nrtm_test.go | Implemented |
 | REQ-NF-02 | ARCH-IO-04 | io.go | videometa_latency_test.go, videometa_bench_test.go | Validated |
 | REQ-NF-03 | ARCH-TEST-03 | videometa_bench_test.go | videometa_bench_test.go | Static |
 | REQ-NF-04 | ARCH-TEST-01 | gen/main.go | videometa_golden_test.go | Validated |
 | REQ-NF-05 | ARCH-TEST-04 | videometa_fuzz_test.go | videometa_fuzz_test.go | Implemented |
-| REQ-NF-06 | ARCH-ERR-01 | helpers.go | videometa_test.go, helpers_test.go | Implemented |
+| REQ-NF-06 | ARCH-ERR-01 | errors.go | videometa_test.go, errors_test.go | Implemented |
 | REQ-NF-07 | — | go.mod | — | Static |
 | REQ-NF-08 | ARCH-DEP-01 | go.mod | — | Static |
 | REQ-NF-09 | — | LICENSE | — | Static |

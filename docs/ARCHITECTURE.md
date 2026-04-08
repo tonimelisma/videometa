@@ -36,10 +36,14 @@ Embedded image metadata payloads are intentionally not part of this pipeline. `v
 | ARCH-FILE-05 | `metadecoder_quicktime_pentax.go` | Pentax `TAGS` vendor metadata family | REQ-VENDOR-* |
 | ARCH-FILE-06 | `metadecoder_quicktime_gopro.go` | GoPro `udta`/GPMF vendor metadata family | REQ-VENDOR-* |
 | ARCH-FILE-07 | `metadecoder_sony_nrtm.go` | Sony NRTM XML vendor metadata parser | REQ-VENDOR-* |
-| ARCH-FILE-08 | `helpers.go` | InvalidFormatError, time parsing, ISO6709 parsing, shared formatting helpers | REQ-QT-06, REQ-NF-06 |
-| ARCH-FILE-09 | `gen/main.go` | Golden file generator (grouped JSON + ordered occurrence goldens) | REQ-NF-04 |
-| ARCH-FILE-10 | `testdata/` | Test video files + grouped and ordered exiftool goldens | REQ-TEST-* |
-| ARCH-FILE-11 | `.github/workflows/ci.yml` | CI with exiftool-backed golden validation | REQ-NF-10 |
+| ARCH-FILE-08 | `errors.go` | InvalidFormatError helpers for malformed container input | REQ-NF-06 |
+| ARCH-FILE-09 | `datetime.go` | Video-metadata timestamp parsing and exiftool-format normalization | REQ-API-11, REQ-QT-08 |
+| ARCH-FILE-10 | `gps.go` | ISO6709 parsing, vendor GPS parsing, and exiftool-format normalization | REQ-QT-06, REQ-API-13 |
+| ARCH-FILE-11 | `text.go` | Shared text sanitization and null-padding trimming for metadata payloads | REQ-QT-03, REQ-VENDOR-01 |
+| ARCH-FILE-12 | `value.go` | Numeric tag-value coercion used by convenience APIs and golden comparisons | REQ-API-13, REQ-NF-04 |
+| ARCH-FILE-13 | `gen/main.go` | Golden file generator (grouped JSON + ordered occurrence goldens) | REQ-NF-04 |
+| ARCH-FILE-14 | `testdata/` | Test video files + grouped and ordered exiftool goldens | REQ-TEST-* |
+| ARCH-FILE-15 | `.github/workflows/ci.yml` | CI with exiftool-backed golden validation | REQ-NF-10 |
 
 ---
 
@@ -95,7 +99,7 @@ They are not “temporarily unsupported”; they are out of scope by design.
 | ARCH-DEC-01 | QuickTime decoder: `ilst`, freeform, mdta, locale handling, exiftool-exact tag names | No image-metadata dependency; core video/container logic | REQ-QT-* |
 | ARCH-DEC-02 | Vendor decoders: Pentax `TAGS`, Sony UUID/NRTM, GoPro `udta`/GPMF | Vendor metadata is still video/container metadata and remains first-class | REQ-VENDOR-* |
 | ARCH-DEC-03 | Lossless collector stores tags by source + namespace + tag + occurrence order, exposed via `SourceTags` and `NamespaceTags` | Prevents collisions and silent overwrites | REQ-API-16, REQ-API-19, REQ-API-22 |
-| ARCH-DEC-04 | Shared helpers parse video-native timestamps and ISO6709 GPS coordinates | Keeps API conveniences aligned with supported metadata | REQ-API-11, REQ-API-13, REQ-QT-06 |
+| ARCH-DEC-04 | Shared runtime support is split by domain: timestamps (`datetime.go`), GPS (`gps.go`), text sanitization (`text.go`), and numeric coercion (`value.go`) | Keeps the package video-native while avoiding a catch-all helper layer | REQ-API-11, REQ-API-13, REQ-QT-06 |
 
 ### Namespace Contract
 

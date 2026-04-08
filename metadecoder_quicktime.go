@@ -213,7 +213,7 @@ func (d *videoDecoderMP4) decodeQTValue(typeIndicator uint32, valueLen int) any 
 	default:
 		// Unknown type — return as raw bytes or skip.
 		if valueLen > 0 {
-			return string(trimNulls(d.readBytes(valueLen)))
+			return string(trimTrailingNulls(d.readBytes(valueLen)))
 		}
 	}
 	return nil
