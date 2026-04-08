@@ -19,7 +19,7 @@ See `INIT.md` for project history. See `docs/` for requirements, architecture, a
 | `metadecoder_quicktime*.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (QuickTime, Vendor) |
 | `metadecoder_sony_nrtm.go` | `docs/ARCHITECTURE.md` §4 (Decoders) | `docs/REQUIREMENTS.md` §3 (Vendor) |
 | `io.go` | `docs/ARCHITECTURE.md` §5 (streamReader) | |
-| `helpers.go` | `docs/ARCHITECTURE.md` §6 (Error Handling) | |
+| `errors.go`, `datetime.go`, `gps.go`, `text.go`, `value.go` | `docs/ARCHITECTURE.md` §4, §6 | `docs/REQUIREMENTS.md` §2, §4 |
 | `gen/`, `testdata/` | `docs/ARCHITECTURE.md` §7 (Testing) | `docs/REQUIREMENTS.md` §5 (Test Corpus) |
 | `.github/workflows/` | `docs/ARCHITECTURE.md` §7 (Testing) | `docs/REQUIREMENTS.md` §4 (REQ-NF-10) |
 

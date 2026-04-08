@@ -10,7 +10,7 @@ func (d *videoDecoderMP4) decodePentaxTAGS(data []byte) {
 
 	// Make: null-terminated string at offset 0, 24 bytes.
 	if len(data) >= 24 {
-		make_ := printableString(string(trimNulls(data[0:24])))
+		make_ := sanitizeMetadataString(string(trimTrailingNulls(data[0:24])))
 		if make_ != "" {
 			d.emitPentaxVendorTag("Make", make_)
 		}

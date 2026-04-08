@@ -580,7 +580,7 @@ func (d *videoDecoderMP4) decodeHdlr(hdlrStart int64, hdlrSize uint64, namespace
 	var description string
 	if nameLen > 0 && nameLen < 256 {
 		nameBytes := d.readBytes(int(nameLen))
-		description = printableString(string(trimNulls(nameBytes)))
+		description = sanitizeMetadataString(string(trimTrailingNulls(nameBytes)))
 	}
 
 	if d.opts.Sources.Has(QUICKTIME) {
@@ -803,7 +803,7 @@ func (d *videoDecoderMP4) decodeMetadataSampleEntry(entryStart int64, entrySize 
 	if nul := bytes.IndexByte(data, 0); nul >= 0 {
 		data = data[:nul]
 	}
-	metaType := printableString(string(data))
+	metaType := sanitizeMetadataString(string(data))
 	if metaType == "" || !d.opts.Sources.Has(QUICKTIME) {
 		return
 	}
@@ -857,7 +857,7 @@ func (d *videoDecoderMP4) decodeVisualSampleEntry(entryStart int64, entrySize ui
 	nameLen := int(compNameBuf[0])
 	compName := ""
 	if nameLen > 0 && nameLen <= 31 {
-		compName = printableString(string(compNameBuf[1 : 1+nameLen]))
+		compName = sanitizeMetadataString(string(compNameBuf[1 : 1+nameLen]))
 	}
 
 	bitDepth := d.read2()
@@ -1294,7 +1294,7 @@ func (d *videoDecoderMP4) decodeMetaHdlrReturn(hdlrStart int64, hdlrSize uint64,
 	var description string
 	if nameLen > 0 && nameLen < 256 {
 		nameBytes := d.readBytes(int(nameLen))
-		description = printableString(string(trimNulls(nameBytes)))
+		description = sanitizeMetadataString(string(trimTrailingNulls(nameBytes)))
 	}
 
 	if d.opts.Sources.Has(QUICKTIME) {
@@ -1415,13 +1415,13 @@ func (d *videoDecoderMP4) emitQuickTimeTag(name string, value any) {
 	// Convert GPSCoordinates from ISO6709 to exiftool's space-separated decimal format.
 	if name == "GPSCoordinates" {
 		if s, ok := value.(string); ok {
-			value = convertISO6709ToExiftool(s)
+			value = formatISO6709ForExiftool(s)
 		}
 	}
 	// Convert ISO 8601 date strings to exiftool format (YYYY:MM:DD HH:MM:SS±HH:MM).
 	if name == "CreationDate" || name == "ContentCreateDate" {
 		if s, ok := value.(string); ok {
-			if converted := convertDateToExiftool(s); converted != "" {
+			if converted := formatVideoMetadataTimeForExiftool(s); converted != "" {
 				value = converted
 			}
 		}
@@ -1826,7 +1826,7 @@ func (d *videoDecoderMP4) decodeTcmi(payloadLen int) {
 		if fontNameLen > remaining {
 			fontNameLen = remaining
 		}
-		fontName = printableString(string(d.readBytes(fontNameLen)))
+		fontName = sanitizeMetadataString(string(d.readBytes(fontNameLen)))
 		remaining -= fontNameLen
 		if remaining > 0 {
 			d.skip(int64(remaining))

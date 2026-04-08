@@ -57,7 +57,7 @@ func assertGoldenValue(c *qt.C, group, name string, got any, want any) {
 
 	switch w := want.(type) {
 	case float64:
-		gotF, ok := toFloat64(got)
+		gotF, ok := coerceNumericTagValue(got)
 		if !ok {
 			// Try time.Time → date tags where exiftool emits 0 for Mac epoch.
 			if _, isTime := got.(time.Time); isTime {
@@ -93,7 +93,7 @@ func assertGoldenValue(c *qt.C, group, name string, got any, want any) {
 		gotStr := formatValueForGolden(got)
 		// If golden is in exiftool date format and got is ISO 8601, convert for comparison.
 		if gotStr != w {
-			if converted := convertDateToExiftool(gotStr); converted != "" && converted == w {
+			if converted := formatVideoMetadataTimeForExiftool(gotStr); converted != "" && converted == w {
 				gotStr = converted
 			}
 		}
@@ -190,7 +190,7 @@ func goldenGroupTags(tags Tags, group string, golden map[string]any) map[string]
 func goldenValueMatches(got any, want any) bool {
 	switch w := want.(type) {
 	case float64:
-		gotF, ok := toFloat64(got)
+		gotF, ok := coerceNumericTagValue(got)
 		if !ok {
 			if t, isTime := got.(time.Time); isTime {
 				return formatTimeForGolden(t) == fmt.Sprintf("%v", w)
@@ -225,7 +225,7 @@ func goldenValueMatches(got any, want any) bool {
 		if gotStr == w {
 			return true
 		}
-		return convertDateToExiftool(gotStr) == w
+		return formatVideoMetadataTimeForExiftool(gotStr) == w
 	case []any:
 		gotSlice, ok := got.([]string)
 		if !ok || len(gotSlice) != len(w) {

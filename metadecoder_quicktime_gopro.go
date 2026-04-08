@@ -21,7 +21,7 @@ func (d *videoDecoderMP4) decodeGoProStringBox(namespace, tag string, payloadLen
 		return
 	}
 
-	value := printableString(string(trimNulls(d.readBytes(payloadLen))))
+	value := sanitizeMetadataString(string(trimTrailingNulls(d.readBytes(payloadLen))))
 	if value == "" {
 		return
 	}
@@ -393,14 +393,14 @@ func decodeGoProDeviceID(record goProGPMFRecord) string {
 }
 
 func goProCString(data []byte) string {
-	return printableString(string(trimNulls(data)))
+	return sanitizeMetadataString(string(trimTrailingNulls(data)))
 }
 
 func goProFourCC(data []byte) string {
 	if len(data) < 4 {
 		return ""
 	}
-	return printableString(string(data[:4]))
+	return sanitizeMetadataString(string(data[:4]))
 }
 
 func goProStringChunks(data []byte, chunkSize int) []string {
