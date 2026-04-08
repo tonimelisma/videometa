@@ -24,35 +24,18 @@ type traceabilityEvidence struct {
 	realFixture bool
 }
 
-// Validates: REQ-EXIF-04, REQ-EXIF-06, REQ-XMP-04
-func TestTraceabilityEvidenceStatuses(t *testing.T) {
+// Validates: REQ-API-01
+func TestRequirementsDeclareEmbeddedImageMetadataNonGoal(t *testing.T) {
 	c := qt.New(t)
 
-	rows := loadTraceabilityRows(c)
-	expected := map[string]traceabilityRow{
-		"REQ-EXIF-04": {
-			requirement: "REQ-EXIF-04",
-			testFile:    "exif_fields_reference_test.go",
-			status:      "Implemented",
-		},
-		"REQ-EXIF-06": {
-			requirement: "REQ-EXIF-06",
-			testFile:    "videometa_test.go, videometa_meta_items_test.go, videometa_oracle_test.go",
-			status:      "Implemented",
-		},
-		"REQ-XMP-04": {
-			requirement: "REQ-XMP-04",
-			testFile:    "videometa_golden_test.go, videometa_meta_items_test.go, videometa_oracle_test.go",
-			status:      "Validated (`udta/XMP_` real files); Implemented (UUID, meta/iloc)",
-		},
-	}
+	data, err := os.ReadFile("docs/REQUIREMENTS.md")
+	c.Assert(err, qt.IsNil)
 
-	for requirement, want := range expected {
-		row, ok := rows[requirement]
-		c.Assert(ok, qt.IsTrue, qt.Commentf("missing traceability row for %s", requirement))
-		c.Assert(row.testFile, qt.Equals, want.testFile)
-		c.Assert(row.status, qt.Equals, want.status)
-	}
+	text := string(data)
+	c.Assert(strings.Contains(text, "embedded image metadata"), qt.IsTrue)
+	c.Assert(strings.Contains(text, "EXIF/TIFF"), qt.IsTrue)
+	c.Assert(strings.Contains(text, "XMP/RDF"), qt.IsTrue)
+	c.Assert(strings.Contains(text, "IPTC-IIM"), qt.IsTrue)
 }
 
 // Validates: REQ-API-01, REQ-NF-04
@@ -87,8 +70,7 @@ func TestTraceabilityRowsReferenceExistingValidatingTests(t *testing.T) {
 			}
 
 			evidence := collectTraceabilityEvidence(c, file)
-			_, ok := evidence[row.requirement]
-			if !ok {
+			if len(evidence[row.requirement]) == 0 {
 				offenders = append(offenders, row.requirement+" cites "+file+" but the file has no // Validates comment for it")
 			}
 		}

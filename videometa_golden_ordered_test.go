@@ -62,12 +62,6 @@ func actualOrderedGroupTags(tags Tags, group string) []TagInfo {
 
 func goldenFamily0GroupName(tag TagInfo) string {
 	switch tag.Source {
-	case EXIF:
-		return "EXIF"
-	case IPTC:
-		return "IPTC"
-	case XMP:
-		return "XMP"
 	case QUICKTIME:
 		return "QuickTime"
 	case VENDOR:

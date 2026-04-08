@@ -257,7 +257,7 @@ func testGoldenExhaustive(c *qt.C, videoPath string, goldenPath string, groups [
 	// Decode with all sources that any group might need.
 	tags, _, err := decodeAllForTest(Options{
 		R:       f,
-		Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG | COMPOSITE,
+		Sources: QUICKTIME | VENDOR | CONFIG | COMPOSITE,
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -300,11 +300,11 @@ func TestGoldenWithGPS(t *testing.T) {
 		[]string{"QuickTime", "Composite"})
 }
 
-// Validates: REQ-NF-04, REQ-QT-01, REQ-QT-02, REQ-QT-03, REQ-QT-04, REQ-XMP-04
+// Validates: REQ-NF-04, REQ-QT-01, REQ-QT-02, REQ-QT-03, REQ-QT-04
 func TestGoldenExifToolQuickTimeMOV(t *testing.T) {
 	c := qt.New(t)
 	testGoldenExhaustive(c, "testdata/exiftool_quicktime.mov", "testdata/exiftool_quicktime.mov.exiftool.json",
-		[]string{"QuickTime", "XMP", "Composite"})
+		[]string{"QuickTime", "Composite"})
 }
 
 // Validates: REQ-NF-04, REQ-QT-04
@@ -321,7 +321,7 @@ func TestGoldenNonfaststart(t *testing.T) {
 		[]string{"QuickTime", "Composite"})
 }
 
-// Validates: REQ-NF-04, REQ-TEST-09
+// Validates: REQ-NF-04, REQ-VENDOR-04, REQ-TEST-09
 func TestGoldenSonyA6700(t *testing.T) {
 	if _, err := os.Stat("testdata/sony_a6700.mp4"); os.IsNotExist(err) {
 		t.Skip("sony_a6700.mp4 not available")
@@ -351,7 +351,7 @@ func TestGoldenGoogleMP4(t *testing.T) {
 		[]string{"QuickTime", "Composite"})
 }
 
-// Validates: REQ-NF-04, REQ-QT-04, REQ-TEST-07
+// Validates: REQ-NF-04, REQ-VENDOR-04, REQ-TEST-07
 func TestGoldenGoProActionMP4(t *testing.T) {
 	if _, err := os.Stat("testdata/gopro_action.mp4"); os.IsNotExist(err) {
 		t.Skip("gopro_action.mp4 not available")
@@ -361,7 +361,7 @@ func TestGoldenGoProActionMP4(t *testing.T) {
 		[]string{"QuickTime", "Composite"})
 }
 
-// Validates: REQ-NF-04, REQ-QT-04, REQ-TEST-08
+// Validates: REQ-NF-04, REQ-VENDOR-04, REQ-TEST-08
 func TestGoldenDJIInspire3MOV(t *testing.T) {
 	if _, err := os.Stat("testdata/dji_inspire3_car_4k120_rec709.mov"); os.IsNotExist(err) {
 		t.Skip("dji_inspire3_car_4k120_rec709.mov not available")
@@ -371,7 +371,7 @@ func TestGoldenDJIInspire3MOV(t *testing.T) {
 		[]string{"QuickTime", "Composite"})
 }
 
-// Validates: REQ-NF-04, REQ-QT-04, REQ-TEST-09
+// Validates: REQ-NF-04, REQ-VENDOR-04, REQ-TEST-09
 func TestGoldenDJIRonin4DMOV(t *testing.T) {
 	if _, err := os.Stat("testdata/dji_ronin4d_4k_prores4444_25fps.mov"); os.IsNotExist(err) {
 		t.Skip("dji_ronin4d_4k_prores4444_25fps.mov not available")

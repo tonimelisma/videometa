@@ -1,8 +1,9 @@
 // Package videometa reads metadata from video files.
 //
-// It extracts EXIF, XMP, IPTC, QuickTime, and vendor-specific container
-// metadata from MP4/MOV containers (ISOBMFF format). All output matches
-// exiftool, with grouped and ordered golden tests enforcing parity.
+// It extracts QuickTime and vendor-specific container metadata from MP4/MOV
+// containers (ISOBMFF format). All output matches exiftool for the supported
+// video-native metadata paths, with grouped and ordered golden tests enforcing
+// parity.
 package videometa
 
 import (
@@ -19,10 +20,7 @@ import (
 type Source uint32
 
 const (
-	EXIF      Source = 1 << iota // EXIF IFD data
-	IPTC                         // IPTC-IIM records
-	XMP                          // XMP/RDF XML
-	QUICKTIME                    // Standard/container-native QuickTime metadata
+	QUICKTIME Source = 1 << iota // Standard/container-native QuickTime metadata
 	VENDOR                       // Vendor-specific container metadata families
 	CONFIG                       // VideoConfig request flag; not emitted as tags
 	COMPOSITE                    // Derived/computed tags, only materialized by DecodeAll
@@ -47,9 +45,6 @@ func (s Source) String() string {
 		source Source
 		name   string
 	}{
-		{source: EXIF, name: "EXIF"},
-		{source: IPTC, name: "IPTC"},
-		{source: XMP, name: "XMP"},
 		{source: QUICKTIME, name: "QUICKTIME"},
 		{source: VENDOR, name: "VENDOR"},
 		{source: CONFIG, name: "CONFIG"},
@@ -109,9 +104,6 @@ type Options struct {
 	// ShouldHandleTag filters tags before HandleTag. Return false to skip.
 	ShouldHandleTag func(TagInfo) bool
 
-	// HandleXMP, if set, receives the raw XMP reader instead of parsing it.
-	HandleXMP func(r io.Reader) error
-
 	// Warnf receives non-fatal warnings (e.g., skipped boxes, partial decodes).
 	Warnf func(format string, args ...any)
 
@@ -167,7 +159,7 @@ func Decode(opts Options) (result DecodeResult, err error) {
 		return result, fmt.Errorf("videometa: Options.HandleTag is required")
 	}
 	if opts.Sources.IsZero() {
-		opts.Sources = EXIF | IPTC | XMP | QUICKTIME | VENDOR | CONFIG
+		opts.Sources = QUICKTIME | VENDOR | CONFIG
 	}
 	wantsConfig = opts.Sources.Has(CONFIG)
 	opts.Sources = opts.Sources.Remove(COMPOSITE)
@@ -347,15 +339,6 @@ func (t Tags) All() []TagInfo {
 	return slices.Clone(t.ordered)
 }
 
-// EXIF returns all EXIF tags.
-func (t Tags) EXIF() SourceTags { return t.source(EXIF) }
-
-// IPTC returns all IPTC tags.
-func (t Tags) IPTC() SourceTags { return t.source(IPTC) }
-
-// XMP returns all XMP tags.
-func (t Tags) XMP() SourceTags { return t.source(XMP) }
-
 // QuickTime returns all standard QuickTime tags.
 func (t Tags) QuickTime() SourceTags { return t.source(QUICKTIME) }
 
@@ -453,18 +436,15 @@ func firstNumericValue(sources []SourceTags, keys ...string) (float64, bool) {
 }
 
 // GetDateTime returns the best available creation time with original timezone.
-// Priority: EXIF DateTimeOriginal/CreateDate/ModifyDate > XMP DateTimeOriginal/
-// CreateDate/ModifyDate > QuickTime CreationDate/CreateDate/ModifyDate >
-// IPTC DateCreated.
+// Priority: QuickTime CreationDate/CreateDate/ModifyDate >
+// vendor-specific container metadata creation tags.
 func (t Tags) GetDateTime() (time.Time, error) {
 	candidates := []struct {
 		source SourceTags
 		keys   []string
 	}{
-		{source: t.EXIF(), keys: []string{"DateTimeOriginal", "CreateDate", "ModifyDate"}},
-		{source: t.XMP(), keys: []string{"DateTimeOriginal", "CreateDate", "ModifyDate"}},
 		{source: t.QuickTime(), keys: []string{"CreationDate", "CreateDate", "ModifyDate"}},
-		{source: t.IPTC(), keys: []string{"DateCreated"}},
+		{source: t.Vendor(), keys: []string{"CreationDate", "CreateDate", "ModifyDate", "DateTimeOriginal"}},
 	}
 
 	for _, candidate := range candidates {
@@ -488,35 +468,23 @@ func (t Tags) GetDateTimeUTC() (time.Time, error) {
 }
 
 // GetLatLong returns GPS coordinates in decimal degrees.
-// Priority: EXIF GPS > XMP GPS > QuickTime GPS.
+// Priority: QuickTime GPS > vendor-specific container GPS.
 func (t Tags) GetLatLong() (lat, lon float64, err error) {
-	// Try EXIF GPS.
-	if latTag, found := firstTagInfo(t.EXIF(), "GPSLatitude"); found {
-		if lonTag, found := firstTagInfo(t.EXIF(), "GPSLongitude"); found {
-			if latVal, ok := toFloat64(latTag.Value); ok {
-				if lonVal, ok := toFloat64(lonTag.Value); ok {
-					return latVal, lonVal, nil
-				}
-			}
-		}
-	}
-
-	// Try XMP GPS.
-	if latTag, found := firstTagInfo(t.XMP(), "GPSLatitude"); found {
-		if lonTag, found := firstTagInfo(t.XMP(), "GPSLongitude"); found {
-			if latVal, ok := toFloat64(latTag.Value); ok {
-				if lonVal, ok := toFloat64(lonTag.Value); ok {
-					return latVal, lonVal, nil
-				}
-			}
-		}
-	}
-
 	// Try QuickTime GPS (space-separated decimal or ISO6709).
 	if gpsTag, found := firstTagInfo(t.QuickTime(), "GPSCoordinates"); found {
 		if s, ok := gpsTag.Value.(string); ok {
 			if lat, lon, err := parseGPSCoordinatesString(s); err == nil {
 				return lat, lon, nil
+			}
+		}
+	}
+
+	if latTag, found := firstTagInfo(t.Vendor(), "GPSLatitude", "Latitude"); found {
+		if lonTag, found := firstTagInfo(t.Vendor(), "GPSLongitude", "Longitude"); found {
+			if latVal, ok := toFloat64(latTag.Value); ok {
+				if lonVal, ok := toFloat64(lonTag.Value); ok {
+					return latVal, lonVal, nil
+				}
 			}
 		}
 	}
@@ -529,12 +497,12 @@ func DecodeAll(opts Options) (Metadata, error) {
 	var metadata Metadata
 	requestedSources := opts.Sources
 	if requestedSources.IsZero() {
-		requestedSources = EXIF | IPTC | XMP | QUICKTIME | VENDOR | CONFIG | COMPOSITE
+		requestedSources = QUICKTIME | VENDOR | CONFIG | COMPOSITE
 	}
 
 	decodeSources := requestedSources.Remove(COMPOSITE)
 	if requestedSources.Has(COMPOSITE) {
-		decodeSources |= EXIF | IPTC | XMP | QUICKTIME | VENDOR | CONFIG
+		decodeSources |= QUICKTIME | VENDOR | CONFIG
 	}
 	opts.Sources = decodeSources
 	opts.HandleTag = func(ti TagInfo) error {

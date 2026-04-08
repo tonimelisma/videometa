@@ -1,7 +1,7 @@
 //go:build ignore
 
-// gen/main.go regenerates exiftool-based golden JSON files and the generated
-// EXIF field tables used by the decoder.
+// gen/main.go regenerates exiftool-based golden JSON files for supported
+// video-native metadata groups.
 //
 //go:generate go run main.go
 package main
@@ -10,38 +10,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"go/format"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 )
 
 const (
-	testdataDir          = "../testdata"
-	exifManifestPath     = "exif_fields_reference.json"
-	exifFieldsOutputPath = "../metadecoder_exif_fields.go"
-	legacyPentaxGroup    = "Maker" + "Notes"
-	orderedValueSep      = "\x1f"
+	testdataDir       = "../testdata"
+	legacyPentaxGroup = "Maker" + "Notes"
+	orderedValueSep   = "\x1f"
 )
-
-type tagEntry struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-type exifFieldManifest struct {
-	EXIF    []tagEntry `json:"exif"`
-	GPS     []tagEntry `json:"gps"`
-	Interop []tagEntry `json:"interop"`
-}
-
-type manifestEntry struct {
-	id   uint16
-	name string
-}
 
 type orderedGoldenFile struct {
 	SourceFile string               `json:"sourceFile"`
@@ -59,10 +39,7 @@ type orderedGoldenTag struct {
 }
 
 var orderedGoldenGroups = map[string]bool{
-	"EXIF":      true,
-	"IPTC":      true,
 	"QuickTime": true,
-	"XMP":       true,
 	"XML":       true,
 	"Composite": true,
 }
@@ -70,10 +47,6 @@ var orderedGoldenGroups = map[string]bool{
 func main() {
 	if err := generateGoldenFiles(); err != nil {
 		fmt.Fprintf(os.Stderr, "generate golden files: %v\n", err)
-		os.Exit(1)
-	}
-	if err := generateEXIFFields(); err != nil {
-		fmt.Fprintf(os.Stderr, "generate exif fields: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -142,7 +115,10 @@ func generateGoldenFiles() error {
 }
 
 func normalizeGoldenJSON(raw []byte) ([]byte, error) {
-	if !bytes.Contains(raw, []byte(`"`+legacyPentaxGroup+`"`)) {
+	if !bytes.Contains(raw, []byte(`"`+legacyPentaxGroup+`"`)) &&
+		!bytes.Contains(raw, []byte(`"EXIF"`)) &&
+		!bytes.Contains(raw, []byte(`"IPTC"`)) &&
+		!bytes.Contains(raw, []byte(`"XMP"`)) {
 		return raw, nil
 	}
 
@@ -153,6 +129,9 @@ func normalizeGoldenJSON(raw []byte) ([]byte, error) {
 
 	for _, result := range results {
 		migratePentaxGroup(result)
+		delete(result, "EXIF")
+		delete(result, "IPTC")
+		delete(result, "XMP")
 	}
 
 	normalized, err := json.MarshalIndent(results, "", "  ")
@@ -276,141 +255,4 @@ func parseOrderedGolden(raw []byte, videoPath string) (orderedGoldenFile, error)
 		SourceFile: videoPath,
 		Groups:     orderedGroups,
 	}, nil
-}
-
-func generateEXIFFields() error {
-	manifest, err := loadManifest(exifManifestPath)
-	if err != nil {
-		return err
-	}
-
-	src, err := renderEXIFFields(manifest)
-	if err != nil {
-		return err
-	}
-
-	formatted, err := format.Source(src)
-	if err != nil {
-		return fmt.Errorf("format generated exif fields: %w", err)
-	}
-
-	if err := os.WriteFile(exifFieldsOutputPath, formatted, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", exifFieldsOutputPath, err)
-	}
-
-	fmt.Printf("generated %s\n", exifFieldsOutputPath)
-	return nil
-}
-
-func loadManifest(path string) (exifFieldManifest, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return exifFieldManifest{}, fmt.Errorf("read %s: %w", path, err)
-	}
-
-	var manifest exifFieldManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return exifFieldManifest{}, fmt.Errorf("decode %s: %w", path, err)
-	}
-
-	for _, section := range []struct {
-		name    string
-		entries []tagEntry
-	}{
-		{name: "exif", entries: manifest.EXIF},
-		{name: "gps", entries: manifest.GPS},
-		{name: "interop", entries: manifest.Interop},
-	} {
-		if _, err := parseManifestSection(section.name, section.entries); err != nil {
-			return exifFieldManifest{}, err
-		}
-	}
-
-	return manifest, nil
-}
-
-func parseManifestSection(sectionName string, entries []tagEntry) ([]manifestEntry, error) {
-	parsed := make([]manifestEntry, 0, len(entries))
-	seen := make(map[uint16]bool, len(entries))
-	lastID := uint16(0)
-	for i, entry := range entries {
-		if entry.Name == "" {
-			return nil, fmt.Errorf("%s[%d]: empty name", sectionName, i)
-		}
-		id, err := parseTagID(entry.ID)
-		if err != nil {
-			return nil, fmt.Errorf("%s[%d]: %w", sectionName, i, err)
-		}
-		if seen[id] {
-			return nil, fmt.Errorf("%s[%d]: duplicate tag id %s", sectionName, i, entry.ID)
-		}
-		if i > 0 && id <= lastID {
-			return nil, fmt.Errorf("%s[%d]: ids must be strictly ascending", sectionName, i)
-		}
-		seen[id] = true
-		lastID = id
-		parsed = append(parsed, manifestEntry{
-			id:   id,
-			name: entry.Name,
-		})
-	}
-	return parsed, nil
-}
-
-func parseTagID(raw string) (uint16, error) {
-	if len(raw) != 6 || !strings.HasPrefix(raw, "0x") {
-		return 0, fmt.Errorf("invalid tag id %q", raw)
-	}
-	value, err := strconv.ParseUint(raw[2:], 16, 16)
-	if err != nil {
-		return 0, fmt.Errorf("invalid tag id %q: %w", raw, err)
-	}
-	return uint16(value), nil
-}
-
-func renderEXIFFields(manifest exifFieldManifest) ([]byte, error) {
-	exifEntries, err := parseManifestSection("exif", manifest.EXIF)
-	if err != nil {
-		return nil, err
-	}
-	gpsEntries, err := parseManifestSection("gps", manifest.GPS)
-	if err != nil {
-		return nil, err
-	}
-	interopEntries, err := parseManifestSection("interop", manifest.Interop)
-	if err != nil {
-		return nil, err
-	}
-
-	var out bytes.Buffer
-	fmt.Fprintln(&out, "// Code generated by go generate ./gen; DO NOT EDIT.")
-	fmt.Fprintln(&out)
-	fmt.Fprintln(&out, "package videometa")
-	fmt.Fprintln(&out)
-	fmt.Fprintf(&out, "// exifFields maps EXIF tag IDs to their names.\n")
-	fmt.Fprintf(&out, "// Names are generated from %s and match the committed exiftool 13.50 reference set.\n", exifManifestPath)
-	writeTagMap(&out, "exifFields", exifEntries)
-	fmt.Fprintln(&out)
-	fmt.Fprintln(&out, "// exifFieldsGPS maps GPS IFD tag IDs to their names.")
-	writeTagMap(&out, "exifFieldsGPS", gpsEntries)
-	fmt.Fprintln(&out)
-	fmt.Fprintln(&out, "// exifIFDPointers maps tag IDs that are pointers to sub-IFDs.")
-	fmt.Fprintln(&out, "var exifIFDPointers = map[uint16]string{")
-	fmt.Fprintln(&out, "\t0x8769: \"ExifIFD\",")
-	fmt.Fprintln(&out, "\t0x8825: \"GPSInfoIFD\",")
-	fmt.Fprintln(&out, "\t0xA005: \"InteropIFD\",")
-	fmt.Fprintln(&out, "}")
-	fmt.Fprintln(&out)
-	fmt.Fprintln(&out, "// exifInteropFields maps Interoperability IFD tag IDs.")
-	writeTagMap(&out, "exifInteropFields", interopEntries)
-
-	return out.Bytes(), nil
-}
-
-func writeTagMap(out *bytes.Buffer, name string, entries []manifestEntry) {
-	fmt.Fprintf(out, "var %s = map[uint16]string{\n", name)
-	for _, entry := range entries {
-		fmt.Fprintf(out, "\t0x%04X: %q,\n", entry.id, entry.name)
-	}
-	fmt.Fprintln(out, "}")
 }

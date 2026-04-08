@@ -18,7 +18,7 @@ func BenchmarkDecodeMinimalMP4AllSources(b *testing.B) {
 		r := newBytesReadSeeker(data)
 		_, _ = Decode(Options{
 			R:       r,
-			Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG,
+			Sources: QUICKTIME | VENDOR | CONFIG,
 			HandleTag: func(ti TagInfo) error {
 				return nil
 			},
@@ -78,7 +78,7 @@ func BenchmarkDecodeAllMinimalMP4(b *testing.B) {
 		r := newBytesReadSeeker(data)
 		_, _ = DecodeAll(Options{
 			R:       r,
-			Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG,
+			Sources: QUICKTIME | VENDOR | CONFIG,
 		})
 	}
 }
@@ -95,7 +95,7 @@ func BenchmarkDecodeExifToolQuickTimeMOV(b *testing.B) {
 		r := newBytesReadSeeker(data)
 		_, _ = DecodeAll(Options{
 			R:       r,
-			Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG,
+			Sources: QUICKTIME | VENDOR | CONFIG,
 		})
 	}
 }

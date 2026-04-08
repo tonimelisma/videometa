@@ -31,7 +31,7 @@ func TestLocalDJIRonin4DFixtureAvailable(t *testing.T) {
 	assertLocalFixtureAvailable(c, "testdata/dji_ronin4d_4k_prores4444_25fps.mov")
 }
 
-// Validates: REQ-QT-04
+// Validates: REQ-QT-04, REQ-CFG-04
 func TestGoogleMP4ColorProfileTags(t *testing.T) {
 	if _, err := os.Stat("testdata/google.mp4"); os.IsNotExist(err) {
 		t.Skip("google.mp4 not available")

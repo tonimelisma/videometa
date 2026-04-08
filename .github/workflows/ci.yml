@@ -38,8 +38,8 @@ jobs:
       - name: Validate golden files
         run: |
           go generate ./gen
-          if ! git diff --quiet -- testdata/*.exiftool.json testdata/*.exiftool.ordered.json metadecoder_exif_fields.go; then
+          if ! git diff --quiet -- testdata/*.exiftool.json testdata/*.exiftool.ordered.json; then
             echo "Generated artifacts are out of date. Run 'go generate ./gen' and commit."
-            git diff -- testdata/*.exiftool.json testdata/*.exiftool.ordered.json metadecoder_exif_fields.go
+            git diff -- testdata/*.exiftool.json testdata/*.exiftool.ordered.json
             exit 1
           fi

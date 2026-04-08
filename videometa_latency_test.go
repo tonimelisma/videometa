@@ -22,13 +22,13 @@ func TestDecodeLatencyTarget(t *testing.T) {
 		{
 			name:    "minimal.mp4",
 			path:    "testdata/minimal.mp4",
-			sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG,
+			sources: QUICKTIME | VENDOR | CONFIG,
 			ceiling: 500 * time.Microsecond,
 		},
 		{
 			name:    "exiftool_quicktime.mov",
 			path:    "testdata/exiftool_quicktime.mov",
-			sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG,
+			sources: QUICKTIME | VENDOR | CONFIG,
 			ceiling: 500 * time.Microsecond,
 		},
 		{

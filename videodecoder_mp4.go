@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"math"
 	"strings"
 	"time"
@@ -1120,8 +1119,8 @@ func (d *videoDecoderMP4) decodeBtrt() {
 }
 
 // decodeUdta iterates the user data box.
-// Handles meta containers, old-style QuickTime text atoms (©xxx), XMP_ boxes,
-// vendor TAGS atoms, and UUID boxes.
+// Handles meta containers, old-style QuickTime text atoms (©xxx), vendor TAGS
+// atoms, and UUID boxes.
 func (d *videoDecoderMP4) decodeUdta(udtaStart int64, udtaSize uint64) {
 	restore := d.withQuickTimeNamespace("moov/udta")
 	defer restore()
@@ -1138,16 +1137,6 @@ func (d *videoDecoderMP4) decodeUdta(udtaStart int64, udtaSize uint64) {
 		switch {
 		case boxTypeStr == "meta":
 			d.decodeMeta(startPos, boxSize, "moov/udta/meta")
-		case boxTypeStr == "XMP_":
-			// Raw XMP data directly in udta (common in QuickTime MOV files).
-			if d.opts.Sources.Has(XMP) {
-				dataLen := int(boxSize) - 8
-				if dataLen > 0 {
-					rc := d.bufferedReader(dataLen)
-					_ = d.decodeXMP(rc)
-					_ = rc.Close()
-				}
-			}
 		case boxTypeStr == "TAGS":
 			if d.opts.Sources.Has(VENDOR) {
 				dataLen := int(boxSize) - 8
@@ -1230,10 +1219,6 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64, metaPath 
 	// Track the handler type and keys for mdta-style metadata.
 	var handlerType string
 	var keysTable []string
-	var itemCtx *metaItemContext
-	if d.opts.Sources.Has(EXIF | XMP) {
-		itemCtx = newMetaItemContext()
-	}
 
 	for d.pos() < metaEnd {
 		startPos := d.pos()
@@ -1245,18 +1230,6 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64, metaPath 
 		switch boxType.String() {
 		case "hdlr":
 			handlerType = d.decodeMetaHdlrReturn(startPos, boxSize, metaPath+"/hdlr")
-		case "iloc":
-			if itemCtx != nil {
-				d.decodeMetaIloc(startPos, boxSize, itemCtx)
-			}
-		case "iinf":
-			if itemCtx != nil {
-				d.decodeMetaIinf(startPos, boxSize, itemCtx)
-			}
-		case "pitm":
-			if itemCtx != nil {
-				d.decodeMetaPitm(startPos, boxSize, itemCtx)
-			}
 		case "keys":
 			keysTable = d.decodeKeysBox(startPos, boxSize)
 		case "ilst":
@@ -1268,40 +1241,14 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64, metaPath 
 				}
 			}
 		case "idat":
-			idatOffset := d.pos()
 			idatSize := boxSize - uint64(d.pos()-startPos)
 			shouldScanNRTMIDAT := handlerType == "nrtm" &&
 				d.opts.Sources.Has(VENDOR) &&
 				idatSize > 0 &&
 				idatSize < maxSonyNRTMIDATScan
-			var idatData []byte
-			readIDAT := func() []byte {
-				if idatData != nil {
-					return idatData
-				}
-				if idatSize == 0 {
-					idatData = []byte{}
-					return idatData
-				}
-				if idatSize > maxMetaItemPayload {
-					if itemCtx != nil {
-						d.warnMetaItem("skipping idat box larger than %d bytes", maxMetaItemPayload)
-					}
-					return nil
-				}
-				idatData = d.readBytes(int(idatSize))
-				return idatData
-			}
-			if itemCtx != nil {
-				itemCtx.idatOffset = idatOffset
-				itemCtx.idatSize = idatSize
-				if !d.canSeek {
-					itemCtx.idatData = append([]byte(nil), readIDAT()...)
-				}
-			}
 			// Sony NRTM XML may be embedded in idat within the meta box.
 			if shouldScanNRTMIDAT {
-				data := readIDAT()
+				data := d.readBytes(int(idatSize))
 				if len(data) > 0 {
 					xmlData := scanForXMLInMeta(data)
 					if xmlData != nil {
@@ -1325,10 +1272,6 @@ func (d *videoDecoderMP4) decodeMeta(metaStart int64, metaSize uint64, metaPath 
 		}
 
 		d.seekToBoxEnd(startPos, boxSize)
-	}
-
-	if itemCtx != nil {
-		d.decodeMetaItems(itemCtx)
 	}
 }
 
@@ -1440,8 +1383,8 @@ func mdtaKeyToTagName(key string) string {
 	return key
 }
 
-// decodeUUID handles UUID extended-type boxes. XMP and EXIF data in MP4
-// can be stored in UUID boxes identified by specific 16-byte GUIDs.
+// decodeUUID handles UUID extended-type boxes for supported vendor metadata
+// families.
 func (d *videoDecoderMP4) decodeUUID(startPos int64, boxSize uint64) {
 	// The UUID is the first 16 bytes after the standard 8-byte box header.
 	var uuid [16]byte
@@ -1454,25 +1397,6 @@ func (d *videoDecoderMP4) decodeUUID(startPos int64, boxSize uint64) {
 	}
 
 	switch uuid {
-	case xmpUUID:
-		if d.opts.Sources.Has(XMP) {
-			rc := d.bufferedReader(int(dataLen))
-			defer func() { _ = rc.Close() }()
-			_ = d.decodeXMP(rc)
-		}
-	case exifUUID:
-		if d.opts.Sources.Has(EXIF) {
-			// EXIF in MP4 UUID box has a 4-byte header offset prefix.
-			headerOffset := d.read4()
-			rc := d.bufferedReader(int(dataLen) - 4)
-			defer func() { _ = rc.Close() }()
-			// Skip the header offset bytes within the buffered reader.
-			if headerOffset > 0 {
-				buf := make([]byte, headerOffset)
-				_, _ = io.ReadFull(rc, buf)
-			}
-			d.decodeEXIF(rc)
-		}
 	case profUUID:
 		if d.opts.Sources.Has(VENDOR) {
 			d.decodePROFUUID(dataLen)
