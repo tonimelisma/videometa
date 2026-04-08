@@ -13,12 +13,10 @@
 
 # Large test files (downloaded locally, not committed)
 testdata/gopro_*.mp4
-testdata/sony_a6700.mp4
 testdata/apple.mov
 testdata/dji_ronin4d_4k_prores4444_25fps.mov
 testdata/dji_inspire3_car_4k120_rec709.mov
 testdata/android_phone_gps.mp4
-testdata/google.mp4
 testdata/gopro_action.mp4
 testdata/panasonic_pro_camera.mov
 testdata/canon_pro_camera.mov

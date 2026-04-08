@@ -8,38 +8,34 @@ import (
 )
 
 // Validates: REQ-TEST-06
-func TestLocalGoogleFixtureAvailable(t *testing.T) {
+func TestCommittedGoogleFixtureAvailable(t *testing.T) {
 	c := qt.New(t)
-	assertLocalFixtureAvailable(c, "testdata/google.mp4")
+	assertFixtureAvailable(c, committedGoogleFixture)
 }
 
 // Validates: REQ-TEST-07
-func TestLocalGoProFixtureAvailable(t *testing.T) {
+func TestBootstrappedGoProFixtureAvailable(t *testing.T) {
 	c := qt.New(t)
-	assertLocalFixtureAvailable(c, "testdata/gopro_action.mp4")
+	assertBootstrappedFixtureAvailable(c, bootstrappedGoProFixture)
 }
 
 // Validates: REQ-TEST-08
-func TestLocalDJIInspire3FixtureAvailable(t *testing.T) {
+func TestBootstrappedDJIInspire3FixtureAvailable(t *testing.T) {
 	c := qt.New(t)
-	assertLocalFixtureAvailable(c, "testdata/dji_inspire3_car_4k120_rec709.mov")
+	assertBootstrappedFixtureAvailable(c, bootstrappedDJIInspireFixture)
 }
 
 // Validates: REQ-TEST-09
-func TestLocalDJIRonin4DFixtureAvailable(t *testing.T) {
+func TestBootstrappedDJIRonin4DFixtureAvailable(t *testing.T) {
 	c := qt.New(t)
-	assertLocalFixtureAvailable(c, "testdata/dji_ronin4d_4k_prores4444_25fps.mov")
+	assertBootstrappedFixtureAvailable(c, bootstrappedDJIRoninFixture)
 }
 
 // Validates: REQ-QT-04, REQ-CFG-04
 func TestGoogleMP4ColorProfileTags(t *testing.T) {
-	if _, err := os.Stat("testdata/google.mp4"); os.IsNotExist(err) {
-		t.Skip("google.mp4 not available")
-	}
-
 	c := qt.New(t)
 
-	f, err := os.Open("testdata/google.mp4")
+	f, err := os.Open(committedGoogleFixture)
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = f.Close() }()
 
@@ -69,14 +65,9 @@ func TestGoogleMP4ColorProfileTags(t *testing.T) {
 
 // Validates: REQ-QT-04, REQ-TEST-07
 func TestGoProMP4RepeatedVendorTags(t *testing.T) {
-	if _, err := os.Stat("testdata/gopro_action.mp4"); os.IsNotExist(err) {
-		t.Skip("gopro_action.mp4 not available")
-	}
-
 	c := qt.New(t)
 
-	f, err := os.Open("testdata/gopro_action.mp4")
-	c.Assert(err, qt.IsNil)
+	f := openBootstrappedFixture(t, bootstrappedGoProFixture)
 	defer func() { _ = f.Close() }()
 
 	metadata, err := DecodeAll(Options{R: f, Sources: QUICKTIME | VENDOR})
@@ -93,15 +84,22 @@ func TestGoProMP4RepeatedVendorTags(t *testing.T) {
 	c.Assert(videoFrameRates[0].Value, qt.Equals, "30000 1001")
 }
 
-func assertLocalFixtureAvailable(c *qt.C, mediaPath string) {
+func assertFixtureAvailable(c *qt.C, mediaPath string) {
 	c.Helper()
-
-	if _, err := os.Stat(mediaPath); os.IsNotExist(err) {
-		c.Skip(mediaPath + " not available")
-	}
 
 	f, err := os.Open(mediaPath)
 	c.Assert(err, qt.IsNil)
+	defer func() { _ = f.Close() }()
+
+	metadata, err := DecodeAll(Options{R: f, Sources: QUICKTIME | VENDOR | CONFIG})
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(metadata.Tags.All()) > 0, qt.IsTrue)
+}
+
+func assertBootstrappedFixtureAvailable(c *qt.C, mediaPath string) {
+	c.Helper()
+
+	f := openBootstrappedFixture(c, mediaPath)
 	defer func() { _ = f.Close() }()
 
 	metadata, err := DecodeAll(Options{R: f, Sources: QUICKTIME | VENDOR | CONFIG})

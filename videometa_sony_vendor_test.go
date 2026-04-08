@@ -9,13 +9,9 @@ import (
 
 // Validates: REQ-NF-04, REQ-TEST-09
 func TestSonyA6700NRTMExposesGPSItems(t *testing.T) {
-	if _, err := os.Stat("testdata/sony_a6700.mp4"); os.IsNotExist(err) {
-		t.Skip("sony_a6700.mp4 not available")
-	}
-
 	c := qt.New(t)
 
-	f, err := os.Open("testdata/sony_a6700.mp4")
+	f, err := os.Open(committedSonyFixture)
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = f.Close() }()
 

@@ -31,7 +31,11 @@ die() {
 
 file_size() {
   local path="$1"
-  stat -f '%z' "$path" 2>/dev/null || stat -c '%s' "$path"
+  if stat -c '%s' "$path" >/dev/null 2>&1; then
+    stat -c '%s' "$path"
+    return
+  fi
+  stat -f '%z' "$path"
 }
 
 final_header_value() {
@@ -255,6 +259,8 @@ cat <<'EOF'
 
 Bootstrap complete.
 
-These downloads are local-only fixtures. They are gitignored on purpose.
+These downloads are bootstrap-downloadable validated fixtures. They are
+gitignored on purpose, but hosted CI and local release verification rely on
+them being restorable from this script.
 For the remaining manual-only fixtures, see docs/FIXTURE_ACQUISITION.md.
 EOF

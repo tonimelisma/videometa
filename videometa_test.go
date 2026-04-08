@@ -685,11 +685,7 @@ func TestQuickTimeNamespaceContractsRealFile(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(compressorID.Value, qt.Equals, "avc1")
 
-	if _, err := os.Stat("testdata/apple.mov"); os.IsNotExist(err) {
-		t.Skip("testdata/apple.mov not present")
-	}
-
-	appleFile, err := os.Open("testdata/apple.mov")
+	appleFile, err := os.Open(committedAppleFixture)
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = appleFile.Close() }()
 
@@ -726,11 +722,7 @@ func TestVendorNamespaceContractsRealFiles(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(math.Abs(exposure.Value.(float64)-0.0260416666666667) < 0.0001, qt.IsTrue)
 
-	if _, err := os.Stat("testdata/sony_a6700.mp4"); os.IsNotExist(err) {
-		t.Skip("testdata/sony_a6700.mp4 not present")
-	}
-
-	sonyFile, err := os.Open("testdata/sony_a6700.mp4")
+	sonyFile, err := os.Open(committedSonyFixture)
 	c.Assert(err, qt.IsNil)
 	defer func() { _ = sonyFile.Close() }()
 

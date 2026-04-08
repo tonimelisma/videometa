@@ -190,7 +190,7 @@ func collectTraceabilityEvidence(c *qt.C, file string) map[string][]traceability
 		start := fset.Position(fn.Body.Pos()).Offset
 		end := fset.Position(fn.Body.End()).Offset
 		body := string(data[start:end])
-		realFixture := strings.Contains(body, "testdata/")
+		realFixture := bodyUsesRealFixture(body)
 
 		for _, requirement := range requirements {
 			evidenceByRequirement[requirement] = append(evidenceByRequirement[requirement], traceabilityEvidence{
@@ -202,6 +202,29 @@ func collectTraceabilityEvidence(c *qt.C, file string) map[string][]traceability
 	}
 
 	return evidenceByRequirement
+}
+
+func bodyUsesRealFixture(body string) bool {
+	markers := []string{
+		"testdata/",
+		"committedAppleFixture",
+		"committedGoogleFixture",
+		"committedSonyFixture",
+		"bootstrappedGoProFixture",
+		"bootstrappedDJIInspireFixture",
+		"bootstrappedDJIRoninFixture",
+		"requireBootstrappedFixture(",
+		"openBootstrappedFixture(",
+		"assertFixtureAvailable(",
+		"assertBootstrappedFixtureAvailable(",
+	}
+
+	for _, marker := range markers {
+		if strings.Contains(body, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func validatedRequirementsFromComment(commentText string) []string {

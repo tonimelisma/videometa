@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -44,6 +43,20 @@ var orderedGoldenGroups = map[string]bool{
 	"Composite": true,
 }
 
+var goldenFixtureFiles = []string{
+	"IMG_5179.MOV",
+	"dji_inspire3_car_4k120_rec709.mov",
+	"dji_ronin4d_4k_prores4444_25fps.mov",
+	"exiftool_quicktime.mov",
+	"google.mp4",
+	"gopro_action.mp4",
+	"minimal.mp4",
+	"nonfaststart.mp4",
+	"sony_a6700.mp4",
+	"with_audio.mp4",
+	"with_gps.mp4",
+}
+
 func main() {
 	if err := generateGoldenFiles(); err != nil {
 		fmt.Fprintf(os.Stderr, "generate golden files: %v\n", err)
@@ -52,33 +65,12 @@ func main() {
 }
 
 func generateGoldenFiles() error {
-	entries, err := os.ReadDir(testdataDir)
-	if err != nil {
-		return fmt.Errorf("read testdata: %w", err)
-	}
-
-	videoExts := map[string]bool{
-		".mp4": true,
-		".mov": true,
-		".m4v": true,
-	}
-
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		ext := strings.ToLower(filepath.Ext(e.Name()))
-		if !videoExts[ext] {
-			continue
-		}
-		names = append(names, e.Name())
-	}
-	sort.Strings(names)
-
 	generated := 0
-	for _, name := range names {
+	for _, name := range goldenFixtureFiles {
 		videoPath := filepath.Join(testdataDir, name)
+		if _, err := os.Stat(videoPath); err != nil {
+			return fmt.Errorf("stat %s: %w", videoPath, err)
+		}
 		goldenPath := filepath.Join(testdataDir, name+".exiftool.json")
 		orderedGoldenPath := filepath.Join(testdataDir, name+".exiftool.ordered.json")
 

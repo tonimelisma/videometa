@@ -15,8 +15,8 @@ func FuzzDecodeMP4(f *testing.F) {
 		"testdata/with_audio.mp4",
 		"testdata/with_gps.mp4",
 		"testdata/exiftool_quicktime.mov",
-		"testdata/sony_a6700.mp4",
-		"testdata/apple.mov",
+		committedSonyFixture,
+		committedAppleFixture,
 	}
 	for _, path := range seeds {
 		data, err := os.ReadFile(path)
@@ -51,8 +51,8 @@ func FuzzDecodeAllMP4(f *testing.F) {
 		"testdata/with_audio.mp4",
 		"testdata/with_gps.mp4",
 		"testdata/exiftool_quicktime.mov",
-		"testdata/sony_a6700.mp4",
-		"testdata/apple.mov",
+		committedSonyFixture,
+		committedAppleFixture,
 	}
 	for _, path := range seeds {
 		data, err := os.ReadFile(path)
