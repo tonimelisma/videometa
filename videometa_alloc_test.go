@@ -30,9 +30,6 @@ func TestDecodeAllocationBudgets(t *testing.T) {
 	largeMdatData := buildMP4WithLargeMdat(256 << 10)
 	largeNRTMData := buildMP4WithSonyNRTMIDAT(bytes.Repeat([]byte("N"), 2<<20))
 
-	itemPayload := wrapEXIFItemPayload(buildMinimalEXIFASCII(0x010F, "Alloc Cam"))
-	metaIlocReaderOnly := buildMP4WithMetaIDATItem(itemPayload, buildInfeEXIF(1), buildIlocIDAT(1, uint32(len(itemPayload))))
-
 	tests := []struct {
 		name   string
 		budget allocationBudget
@@ -44,7 +41,7 @@ func TestDecodeAllocationBudgets(t *testing.T) {
 			decode: func() {
 				_, err := DecodeAll(Options{
 					R:       newBytesReadSeeker(minimalData),
-					Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG | COMPOSITE,
+					Sources: QUICKTIME | VENDOR | CONFIG | COMPOSITE,
 				})
 				c.Assert(err, qt.IsNil)
 			},
@@ -55,7 +52,7 @@ func TestDecodeAllocationBudgets(t *testing.T) {
 			decode: func() {
 				_, err := DecodeAll(Options{
 					R:       newBytesReadSeeker(quickTimeData),
-					Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG | COMPOSITE,
+					Sources: QUICKTIME | VENDOR | CONFIG | COMPOSITE,
 				})
 				c.Assert(err, qt.IsNil)
 			},
@@ -79,18 +76,6 @@ func TestDecodeAllocationBudgets(t *testing.T) {
 				_, err := Decode(Options{
 					R:         newBytesReadSeeker(largeNRTMData),
 					Sources:   VENDOR,
-					HandleTag: func(TagInfo) error { return nil },
-				})
-				c.Assert(err, qt.IsNil)
-			},
-		},
-		{
-			name:   "meta-iloc-reader-only",
-			budget: allocationBudget{maxAllocs: 96, maxBytes: 16 << 10},
-			decode: func() {
-				_, err := Decode(Options{
-					R:         readerOnly{bytes.NewReader(metaIlocReaderOnly)},
-					Sources:   EXIF,
 					HandleTag: func(TagInfo) error { return nil },
 				})
 				c.Assert(err, qt.IsNil)

@@ -152,24 +152,23 @@ func TestDecodeFragmentedMP4Rejected(t *testing.T) {
 func TestSourceBitmask(t *testing.T) {
 	c := qt.New(t)
 
-	s := EXIF | XMP
-	c.Assert(s.Has(EXIF), qt.IsTrue)
-	c.Assert(s.Has(XMP), qt.IsTrue)
-	c.Assert(s.Has(IPTC), qt.IsFalse)
-	c.Assert(s.Has(VENDOR), qt.IsFalse)
+	s := QUICKTIME | VENDOR
+	c.Assert(s.Has(QUICKTIME), qt.IsTrue)
+	c.Assert(s.Has(VENDOR), qt.IsTrue)
+	c.Assert(s.Has(CONFIG), qt.IsFalse)
 	c.Assert(s.Has(COMPOSITE), qt.IsFalse)
 
-	s = s.Remove(EXIF)
-	c.Assert(s.Has(EXIF), qt.IsFalse)
-	c.Assert(s.Has(XMP), qt.IsTrue)
+	s = s.Remove(QUICKTIME)
+	c.Assert(s.Has(QUICKTIME), qt.IsFalse)
+	c.Assert(s.Has(VENDOR), qt.IsTrue)
 }
 
 // Validates: REQ-API-05
 func TestSourceString(t *testing.T) {
 	c := qt.New(t)
 
-	c.Assert(EXIF.String(), qt.Equals, "EXIF")
-	c.Assert((EXIF | VENDOR | CONFIG).String(), qt.Equals, "EXIF|VENDOR|CONFIG")
+	c.Assert(QUICKTIME.String(), qt.Equals, "QUICKTIME")
+	c.Assert((QUICKTIME | VENDOR | CONFIG).String(), qt.Equals, "QUICKTIME|VENDOR|CONFIG")
 	c.Assert(Source(0).String(), qt.Equals, "0")
 }
 
@@ -349,7 +348,7 @@ func TestDecodeNoMetadataFile(t *testing.T) {
 	c.Assert(len(tags), qt.Equals, 3)
 }
 
-// Validates: REQ-API-08, REQ-API-09
+// Validates: REQ-API-07, REQ-API-09
 func TestLimitNumTags(t *testing.T) {
 	c := qt.New(t)
 
@@ -371,7 +370,7 @@ func TestLimitNumTags(t *testing.T) {
 	c.Assert(count, qt.Equals, 5)
 }
 
-// Validates: REQ-API-08
+// Validates: REQ-API-07
 func TestLimitTagSize(t *testing.T) {
 	c := qt.New(t)
 
@@ -511,16 +510,16 @@ func TestDecodeAllDefaultSourcesIncludeComposite(t *testing.T) {
 	}
 }
 
-// Validates: REQ-API-09, REQ-EXIF-06
+// Validates: REQ-API-09
 func TestWarnfCallback(t *testing.T) {
 	c := qt.New(t)
 
-	data := buildMP4WithInvalidEXIF()
+	data := buildMP4WithSonyNRTMIDAT([]byte(`<?xml version="1.0"?><NonRealTimeMeta`))
 
 	var warnings []string
 	_, _ = Decode(Options{
 		R:       readerSeekerFromBytes(data),
-		Sources: QUICKTIME | EXIF,
+		Sources: VENDOR,
 		HandleTag: func(ti TagInfo) error {
 			return nil
 		},
@@ -529,15 +528,15 @@ func TestWarnfCallback(t *testing.T) {
 		},
 	})
 	c.Assert(len(warnings) > 0, qt.IsTrue,
-		qt.Commentf("Warnf should have been called for invalid EXIF data; got 0 warnings"))
-	foundExifWarning := false
+		qt.Commentf("Warnf should have been called for malformed Sony NRTM XML; got 0 warnings"))
+	foundNRTMWarning := false
 	for _, w := range warnings {
-		if strings.Contains(w, "invalid byte order marker") {
-			foundExifWarning = true
+		if strings.Contains(w, "decode sony nrtm") {
+			foundNRTMWarning = true
 		}
 	}
-	c.Assert(foundExifWarning, qt.IsTrue,
-		qt.Commentf("expected warning about invalid byte order marker, got: %v", warnings))
+	c.Assert(foundNRTMWarning, qt.IsTrue,
+		qt.Commentf("expected warning about malformed Sony NRTM XML, got: %v", warnings))
 }
 
 // Validates: REQ-API-02
@@ -545,22 +544,16 @@ func TestTagsGetters(t *testing.T) {
 	c := qt.New(t)
 
 	var tags Tags
-	tags.Add(TagInfo{Source: EXIF, Tag: "Make", Value: "Canon"})
-	tags.Add(TagInfo{Source: XMP, Tag: "Creator", Value: "Test"})
-	tags.Add(TagInfo{Source: IPTC, Tag: "City", Value: "NYC"})
 	tags.Add(TagInfo{Source: QUICKTIME, Tag: "Duration", Value: 5.0})
 	tags.Add(TagInfo{Source: VENDOR, Tag: "DeviceModel", Namespace: "Sony/moov/meta/nrtm", Value: "A7"})
 	tags.Add(TagInfo{Source: COMPOSITE, Tag: "ImageSize", Value: "1920 1080"})
 
-	c.Assert(flattenSourceTags(tags.EXIF())["Make"].Value, qt.Equals, "Canon")
-	c.Assert(flattenSourceTags(tags.XMP())["Creator"].Value, qt.Equals, "Test")
-	c.Assert(flattenSourceTags(tags.IPTC())["City"].Value, qt.Equals, "NYC")
 	c.Assert(flattenSourceTags(tags.QuickTime())["Duration"].Value, qt.Equals, 5.0)
 	c.Assert(flattenSourceTags(tags.Vendor())["DeviceModel"].Value, qt.Equals, "A7")
 	c.Assert(flattenSourceTags(tags.Composite())["ImageSize"].Value, qt.Equals, "1920 1080")
 
 	all := tags.All()
-	c.Assert(len(all), qt.Equals, 6)
+	c.Assert(len(all), qt.Equals, 3)
 }
 
 // Validates: REQ-API-16, REQ-API-19, REQ-API-22
@@ -625,7 +618,7 @@ func TestSourceTagsFindPreservesDecodeOrderAcrossNamespaces(t *testing.T) {
 	c.Assert(matches[2].Namespace, qt.Equals, "moov/trak[1]/mdia/mdhd")
 }
 
-// Validates: REQ-API-16, REQ-API-19, REQ-API-22
+// Validates: REQ-API-16, REQ-API-19, REQ-API-22, REQ-VENDOR-03
 func TestNamespaceTagsPreserveDuplicateTagsWithinNamespace(t *testing.T) {
 	c := qt.New(t)
 
@@ -691,7 +684,7 @@ func TestQuickTimeNamespaceContractsRealFile(t *testing.T) {
 	c.Assert(makeTag.Value, qt.Equals, "Apple")
 }
 
-// Validates: REQ-API-19, REQ-QT-01
+// Validates: REQ-API-19, REQ-VENDOR-01, REQ-VENDOR-02
 func TestVendorNamespaceContractsRealFiles(t *testing.T) {
 	c := qt.New(t)
 
@@ -851,7 +844,7 @@ func TestVideoConfig(t *testing.T) {
 		qt.Commentf("Duration should be > 0, got %v", result.VideoConfig.Duration))
 }
 
-// Validates: REQ-BOX-02
+// Validates: REQ-BOX-02, REQ-TEST-10
 func TestBox64BitExtendedSize(t *testing.T) {
 	c := qt.New(t)
 
@@ -931,7 +924,7 @@ func TestTagsSeparateBySource(t *testing.T) {
 
 	tags, _, err := decodeAllForTest(Options{
 		R:       f,
-		Sources: QUICKTIME | XMP | VENDOR,
+		Sources: QUICKTIME | VENDOR,
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -945,10 +938,6 @@ func TestTagsSeparateBySource(t *testing.T) {
 	vendorTags := flattenSourceTags(tags.Vendor())
 	_, hasISO := vendorTags["ISO"]
 	c.Assert(hasISO, qt.IsTrue, qt.Commentf("Vendor should have ISO"))
-
-	// XMP-sourced tags.
-	xmpTags := flattenSourceTags(tags.XMP())
-	c.Assert(len(xmpTags) > 0, qt.IsTrue, qt.Commentf("no XMP tags"))
 
 	// Tags from different namespaces do not collide in the collected view.
 	allTags := tags.All()
@@ -1101,7 +1090,7 @@ func TestSeedCorpusDecodesSuccessfully(t *testing.T) {
 			tagCount := 0
 			_, err = Decode(Options{
 				R:       f,
-				Sources: EXIF | XMP | IPTC | QUICKTIME | VENDOR | CONFIG,
+				Sources: QUICKTIME | VENDOR | CONFIG,
 				HandleTag: func(ti TagInfo) error {
 					tagCount++
 					return nil

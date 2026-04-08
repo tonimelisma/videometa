@@ -87,13 +87,6 @@
       "XResolution": 72,
       "YResolution": 72
     },
-    "SourceFile": "../testdata/exiftool_quicktime.mov",
-    "XMP": {
-      "Album": "No Album",
-      "AltTapeName": "An Alternate Scene Name",
-      "Creator": "Phil Harvey",
-      "MetadataDate": "2008:09:12 11:17:39-04:00",
-      "XMPToolkit": "Adobe XMP Core 4.1-c036 46.277092, Fri Feb 23 2007 14:16:18        "
-    }
+    "SourceFile": "../testdata/exiftool_quicktime.mov"
   }
 ]

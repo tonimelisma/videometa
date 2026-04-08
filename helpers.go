@@ -1,10 +1,8 @@
 package videometa
 
 import (
-	"encoding"
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -31,90 +29,6 @@ func IsInvalidFormat(err error) bool {
 
 func newInvalidFormatErrorf(format string, args ...any) error {
 	return &InvalidFormatError{Err: fmt.Errorf(format, args...)}
-}
-
-// Rat represents a rational number (numerator/denominator).
-type Rat[T int32 | uint32] interface {
-	Num() T
-	Den() T
-	Float64() float64
-	String() string
-	encoding.TextMarshaler
-	encoding.TextUnmarshaler
-}
-
-type rat[T int32 | uint32] struct {
-	num, den T
-}
-
-// NewRat creates a new rational number, reduced to lowest terms.
-func NewRat[T int32 | uint32](num, den T) (Rat[T], error) {
-	if den == 0 {
-		return nil, fmt.Errorf("videometa: zero denominator")
-	}
-	g := gcd(num, den)
-	return &rat[T]{num: num / g, den: den / g}, nil
-}
-
-func (r *rat[T]) Num() T { return r.num }
-func (r *rat[T]) Den() T { return r.den }
-func (r *rat[T]) Float64() float64 {
-	if r.den == 0 {
-		return 0
-	}
-	return float64(r.num) / float64(r.den)
-}
-
-func (r *rat[T]) String() string {
-	if r.den == 1 {
-		return fmt.Sprintf("%d", r.num)
-	}
-	return fmt.Sprintf("%d/%d", r.num, r.den)
-}
-
-func (r *rat[T]) MarshalText() ([]byte, error) {
-	return []byte(r.String()), nil
-}
-
-func (r *rat[T]) UnmarshalText(text []byte) error {
-	s := string(text)
-	if idx := strings.IndexByte(s, '/'); idx >= 0 {
-		num, err := strconv.ParseInt(s[:idx], 10, 64)
-		if err != nil {
-			return fmt.Errorf("videometa: parse rational numerator: %w", err)
-		}
-		den, err := strconv.ParseInt(s[idx+1:], 10, 64)
-		if err != nil {
-			return fmt.Errorf("videometa: parse rational denominator: %w", err)
-		}
-		r.num = T(num)
-		r.den = T(den)
-	} else {
-		num, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			return fmt.Errorf("videometa: parse rational: %w", err)
-		}
-		r.num = T(num)
-		r.den = 1
-	}
-	return nil
-}
-
-func gcd[T int32 | uint32](a, b T) T {
-	// Work with absolute values for signed types.
-	if a < 0 {
-		a = -a
-	}
-	if b < 0 {
-		b = -b
-	}
-	for b != 0 {
-		a, b = b, a%b
-	}
-	if a == 0 {
-		return 1
-	}
-	return a
 }
 
 // parseISO6709 parses an ISO 6709 coordinate string like "+34.0592-118.4460+042.938/"
@@ -366,7 +280,7 @@ func trimNulls(b []byte) []byte {
 }
 
 // parseAnyDateTime attempts to parse a value as a time.Time using multiple
-// strategies: direct time.Time, EXIF-style strings, ISO 8601, QuickTime dates.
+// strategies: direct time.Time, ISO 8601, and QuickTime-style dates.
 func parseAnyDateTime(v any) (time.Time, error) {
 	switch t := v.(type) {
 	case time.Time:
@@ -381,7 +295,8 @@ func parseAnyDateTime(v any) (time.Time, error) {
 	}
 }
 
-// parseTimeString tries multiple date/time formats used by EXIF, XMP, and QuickTime.
+// parseTimeString tries multiple date/time formats used by real video metadata
+// sources, including QuickTime and vendor container metadata.
 func parseTimeString(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	if s == "" || s == "0000:00:00 00:00:00" {
@@ -389,9 +304,9 @@ func parseTimeString(s string) (time.Time, error) {
 	}
 
 	formats := []string{
-		"2006:01:02 15:04:05",       // EXIF
-		"2006:01:02 15:04:05-07:00", // EXIF with timezone
-		"2006:01:02 15:04:05Z07:00", // EXIF with Z timezone
+		"2006:01:02 15:04:05",
+		"2006:01:02 15:04:05-07:00",
+		"2006:01:02 15:04:05Z07:00",
 		"2006-01-02T15:04:05-07:00", // ISO 8601
 		"2006-01-02T15:04:05Z07:00", // ISO 8601 with Z
 		"2006-01-02T15:04:05-0700",  // QuickTime
@@ -409,20 +324,4 @@ func parseTimeString(s string) (time.Time, error) {
 		}
 	}
 	return time.Time{}, fmt.Errorf("unrecognized date format: %q", s)
-}
-
-// convertAPEXToFNumber converts an APEX aperture value to an f-number.
-func convertAPEXToFNumber(apex float64) float64 {
-	return math.Pow(2, apex/2)
-}
-
-// convertAPEXToSeconds converts an APEX shutter speed value to seconds.
-func convertAPEXToSeconds(apex float64) float64 {
-	return math.Pow(2, -apex)
-}
-
-// convertDegreesToDecimal converts GPS DMS (degrees, minutes, seconds as
-// three rationals) to decimal degrees.
-func convertDegreesToDecimal(degrees, minutes, seconds float64) float64 {
-	return degrees + minutes/60 + seconds/3600
 }

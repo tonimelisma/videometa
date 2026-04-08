@@ -443,31 +443,6 @@
       ]
     },
     {
-      "name": "XMP",
-      "tags": [
-        {
-          "tag": "XMPToolkit",
-          "value": "Adobe XMP Core 4.1-c036 46.277092, Fri Feb 23 2007 14:16:18"
-        },
-        {
-          "tag": "AltTapeName",
-          "value": "An Alternate Scene Name"
-        },
-        {
-          "tag": "Album",
-          "value": "No Album"
-        },
-        {
-          "tag": "MetadataDate",
-          "value": "2008:09:12 11:17:39-04:00"
-        },
-        {
-          "tag": "Creator",
-          "value": "Phil Harvey"
-        }
-      ]
-    },
-    {
       "name": "Composite",
       "tags": [
         {

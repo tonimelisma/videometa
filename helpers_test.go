@@ -7,65 +7,6 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// Validates: REQ-EXIF-05
-func TestRatUint32(t *testing.T) {
-	c := qt.New(t)
-
-	r, err := NewRat[uint32](6, 4)
-	c.Assert(err, qt.IsNil)
-	c.Assert(r.Num(), qt.Equals, uint32(3))
-	c.Assert(r.Den(), qt.Equals, uint32(2))
-	c.Assert(r.Float64(), qt.Equals, 1.5)
-	c.Assert(r.String(), qt.Equals, "3/2")
-}
-
-// Validates: REQ-EXIF-05
-func TestRatInt32(t *testing.T) {
-	c := qt.New(t)
-
-	r, err := NewRat[int32](-6, 4)
-	c.Assert(err, qt.IsNil)
-	c.Assert(r.Num(), qt.Equals, int32(-3))
-	c.Assert(r.Den(), qt.Equals, int32(2))
-	c.Assert(r.Float64(), qt.Equals, -1.5)
-}
-
-// Validates: REQ-EXIF-05
-func TestRatDenOne(t *testing.T) {
-	c := qt.New(t)
-
-	r, err := NewRat[uint32](42, 1)
-	c.Assert(err, qt.IsNil)
-	c.Assert(r.String(), qt.Equals, "42")
-}
-
-// Validates: REQ-NF-06
-func TestRatZeroDen(t *testing.T) {
-	c := qt.New(t)
-
-	_, err := NewRat[uint32](1, 0)
-	c.Assert(err, qt.IsNotNil)
-}
-
-// Validates: REQ-EXIF-05
-func TestRatMarshalText(t *testing.T) {
-	c := qt.New(t)
-
-	r, err := NewRat[uint32](3, 2)
-	c.Assert(err, qt.IsNil)
-
-	text, err := r.MarshalText()
-	c.Assert(err, qt.IsNil)
-	c.Assert(string(text), qt.Equals, "3/2")
-
-	r2, err := NewRat[uint32](1, 1)
-	c.Assert(err, qt.IsNil)
-	err = r2.UnmarshalText(text)
-	c.Assert(err, qt.IsNil)
-	c.Assert(r2.Num(), qt.Equals, uint32(3))
-	c.Assert(r2.Den(), qt.Equals, uint32(2))
-}
-
 // Validates: REQ-NF-06
 func TestInvalidFormatError(t *testing.T) {
 	c := qt.New(t)
@@ -133,30 +74,6 @@ func TestParseISO6709(t *testing.T) {
 	}
 }
 
-// Validates: REQ-EXIF-05
-func TestConvertAPEXToFNumber(t *testing.T) {
-	c := qt.New(t)
-	// APEX 5.0 should give f/5.657 (2^(5/2) ≈ 5.657)
-	f := convertAPEXToFNumber(5.0)
-	c.Assert(math.Abs(f-5.6568) < 0.001, qt.IsTrue)
-}
-
-// Validates: REQ-EXIF-05
-func TestConvertAPEXToSeconds(t *testing.T) {
-	c := qt.New(t)
-	// APEX 6.0 should give 1/64 seconds (2^-6 ≈ 0.015625)
-	s := convertAPEXToSeconds(6.0)
-	c.Assert(math.Abs(s-0.015625) < 0.0001, qt.IsTrue)
-}
-
-// Validates: REQ-EXIF-05
-func TestConvertDegreesToDecimal(t *testing.T) {
-	c := qt.New(t)
-	// 34°3'33" = 34.059166...
-	d := convertDegreesToDecimal(34, 3, 33)
-	c.Assert(math.Abs(d-34.059166) < 0.001, qt.IsTrue)
-}
-
 // Validates: REQ-NF-06
 func TestPrintableString(t *testing.T) {
 	c := qt.New(t)
@@ -176,24 +93,9 @@ func TestTrimNulls(t *testing.T) {
 func TestMatrixToRotation(t *testing.T) {
 	c := qt.New(t)
 
-	// Identity (0°).
 	c.Assert(matrixToRotation([9]int32{0x10000, 0, 0, 0, 0x10000, 0, 0, 0, 0x40000000}), qt.Equals, 0)
-	// 90° CW.
 	c.Assert(matrixToRotation([9]int32{0, 0x10000, 0, -0x10000, 0, 0, 0, 0, 0x40000000}), qt.Equals, 90)
-	// 180°.
 	c.Assert(matrixToRotation([9]int32{-0x10000, 0, 0, 0, -0x10000, 0, 0, 0, 0x40000000}), qt.Equals, 180)
-	// 270° CW.
 	c.Assert(matrixToRotation([9]int32{0, -0x10000, 0, 0x10000, 0, 0, 0, 0, 0x40000000}), qt.Equals, 270)
-	// Non-standard → 0.
 	c.Assert(matrixToRotation([9]int32{0, 0, 0, 0, 0, 0, 0, 0, 0}), qt.Equals, 0)
-}
-
-// Validates: REQ-XMP-01
-func TestCapitalizeFirst(t *testing.T) {
-	c := qt.New(t)
-
-	c.Assert(capitalizeFirst("hello"), qt.Equals, "Hello")
-	c.Assert(capitalizeFirst("Hello"), qt.Equals, "Hello")
-	c.Assert(capitalizeFirst(""), qt.Equals, "")
-	c.Assert(capitalizeFirst("a"), qt.Equals, "A")
 }
