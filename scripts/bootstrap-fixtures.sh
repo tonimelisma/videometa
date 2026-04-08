@@ -31,7 +31,11 @@ die() {
 
 file_size() {
   local path="$1"
-  stat -f '%z' "$path" 2>/dev/null || stat -c '%s' "$path"
+  if stat -c '%s' "$path" >/dev/null 2>&1; then
+    stat -c '%s' "$path"
+    return
+  fi
+  stat -f '%z' "$path"
 }
 
 final_header_value() {
